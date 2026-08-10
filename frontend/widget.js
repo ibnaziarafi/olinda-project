@@ -6,448 +6,437 @@
   if (window.OlindaWidgetInitialized) return;
   window.OlindaWidgetInitialized = true;
 
-  // Determine backend URL from current script tag attributes or fallback to location origin
+  // Determine backend URL from script tag attributes or fallback
   const currentScript = document.currentScript || Array.from(document.scripts).find(s => s.src && s.src.includes('widget.js'));
   const BACKEND_URL = (currentScript && currentScript.getAttribute('data-backend')) || 'https://olinda-ai.onrender.com';
 
-  // Inject Styles
+  // Inject Custom Styles with Forced Internal Margins and Padding
   const styleEl = document.createElement('style');
   styleEl.textContent = `
-    /* Olinda Floating Widget Scoped Styles */
+    /* Widget Colors & Variables */
     #olinda-widget-root {
+      --navy: #0B2A4A;
+      --blue-700: #14508C;
+      --blue-600: #1E6FD9;
+      --blue-400: #5C9FEF;
+      --blue-100: #E9F2FD;
+      --blue-50:  #F5F9FE;
+      --white: #FFFFFF;
+      --ink: #1C2B3A;
+      --ink-soft: #52667A;
+      --line: #D9E6F5;
+
+      --font-display: 'Fraunces', Georgia, serif;
+      --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+      --radius-lg: 20px;
+      --shadow-soft: 0 20px 45px -20px rgba(11,42,74,0.25);
+
       position: fixed;
       bottom: 24px;
       right: 24px;
       z-index: 999999;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      box-sizing: border-box;
+      font-family: var(--font-body);
+      box-sizing: border-box !important;
+      -webkit-font-smoothing: antialiased;
     }
 
-    #olinda-widget-root * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
+    #olinda-widget-root *, 
+    #olinda-widget-root *::before, 
+    #olinda-widget-root *::after {
+      box-sizing: border-box !important;
     }
 
-    /* Floating Launcher Avatar Button */
-    .olinda-launcher-btn {
-      width: 60px;
-      height: 60px;
+    /* Floating Round Chat Button */
+    .olinda-chat-launcher {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      z-index: 999998;
+      width: 62px;
+      height: 62px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #14508C 0%, #0B2A4A 100%);
-      color: #FFFFFF;
-      border: none;
-      box-shadow: 0 10px 25px -5px rgba(11, 42, 74, 0.4);
-      cursor: pointer;
+      background: linear-gradient(155deg, var(--blue-600), var(--navy));
+      color: var(--white);
       display: flex;
       align-items: center;
       justify-content: center;
-      position: relative;
-      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
-    }
-
-    .olinda-launcher-btn:hover {
-      transform: scale(1.08);
-      box-shadow: 0 14px 30px -4px rgba(11, 42, 74, 0.5);
-    }
-
-    .olinda-launcher-btn .olinda-avatar-icon {
-      font-family: Georgia, serif;
-      font-size: 1.4rem;
-      font-weight: 700;
-    }
-
-    .olinda-launcher-badge {
-      position: absolute;
-      top: -2px;
-      right: -2px;
-      width: 14px;
-      height: 14px;
-      background: #2FAE73;
-      border: 2.5px solid #FFFFFF;
-      border-radius: 50%;
-    }
-
-    /* Tooltip Bubble */
-    .olinda-tooltip-banner {
-      position: absolute;
-      right: 72px;
-      bottom: 12px;
-      background: #FFFFFF;
-      color: #1C2B3A;
-      padding: 10px 16px;
-      border-radius: 12px;
-      font-size: 0.85rem;
-      font-weight: 600;
-      white-space: nowrap;
-      box-shadow: 0 8px 24px -6px rgba(11, 42, 74, 0.2);
-      border: 1px solid #D9E6F5;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      animation: olindaSlideIn 0.3s ease-out;
-    }
-
-    .olinda-tooltip-close {
-      background: none;
-      border: none;
-      color: #52667A;
-      font-size: 1rem;
       cursor: pointer;
-      margin-left: 4px;
+      box-shadow: var(--shadow-soft);
+      border: none;
+      transition: transform 0.2s ease, opacity 0.2s ease;
     }
 
-    /* Drawer Window */
+    .olinda-chat-launcher svg {
+      width: 26px;
+      height: 26px;
+    }
+
+    .olinda-chat-launcher.bounce {
+      animation: olinda-launcher-bounce 0.9s ease;
+    }
+
+    .olinda-chat-launcher.hidden {
+      display: none !important;
+    }
+
+    @keyframes olinda-launcher-bounce {
+      0%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-10px); }
+      55% { transform: translateY(0); }
+      75% { transform: translateY(-5px); }
+    }
+
+    /* Chat Window Box */
     .olinda-chat-window {
-      position: absolute;
-      bottom: 74px;
-      right: 0;
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      z-index: 999999;
       width: 380px;
       max-width: calc(100vw - 32px);
-      height: 540px;
-      max-height: calc(100vh - 110px);
-      background: #FFFFFF;
-      border-radius: 20px;
-      box-shadow: 0 20px 45px -15px rgba(11, 42, 74, 0.3);
-      border: 1px solid #D9E6F5;
+      height: 560px;
+      max-height: calc(100vh - 48px);
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-soft);
+      border: 1px solid var(--line);
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-      transform-origin: bottom right;
     }
 
-    .olinda-chat-window.olinda-hidden {
-      display: none;
-      opacity: 0;
-      transform: scale(0.9) translateY(20px);
+    .olinda-chat-window.hidden {
+      display: none !important;
     }
 
-    /* Chat Header */
+    /* Header */
     .olinda-chat-header {
-      background: linear-gradient(135deg, #0B2A4A 0%, #14508C 100%);
-      color: #FFFFFF;
-      padding: 16px 20px;
+      background: linear-gradient(155deg, var(--blue-700), var(--navy));
+      color: var(--white);
+      padding: 16px 20px !important;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-shrink: 0;
     }
 
-    .olinda-header-info {
+    .olinda-chat-header-info {
       display: flex;
       align-items: center;
       gap: 12px;
     }
 
-    .olinda-header-avatar {
+    .olinda-chat-avatar {
       width: 38px;
       height: 38px;
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.16);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: Georgia, serif;
-      font-weight: 700;
-      font-size: 1.1rem;
-    }
-
-    .olinda-header-title {
-      font-size: 1rem;
+      font-family: var(--font-display);
       font-weight: 600;
+      font-size: 1rem;
     }
 
-    .olinda-header-sub {
-      font-size: 0.72rem;
-      color: rgba(255, 255, 255, 0.8);
+    .olinda-chat-name {
+      margin: 0 !important;
+      font-weight: 600;
+      font-size: 0.98rem;
+    }
+
+    .olinda-chat-status {
+      margin: 0 !important;
+      font-size: 0.74rem;
+      color: rgba(255, 255, 255, 0.75);
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 6px;
+      font-family: var(--font-mono);
     }
 
     .olinda-status-dot {
       width: 7px;
       height: 7px;
-      background: #2FAE73;
       border-radius: 50%;
+      background: #4ADE80;
       display: inline-block;
     }
 
-    .olinda-close-btn {
-      background: rgba(255, 255, 255, 0.15);
+    .olinda-chat-close {
+      background: rgba(255, 255, 255, 0.14);
       border: none;
-      color: #FFFFFF;
+      color: var(--white);
       width: 30px;
       height: 30px;
       border-radius: 50%;
-      font-size: 1.2rem;
+      font-size: 1.15rem;
+      line-height: 1;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background 0.2s;
     }
 
-    .olinda-close-btn:hover {
-      background: rgba(255, 255, 255, 0.3);
-    }
-
-    /* Message Body */
-    .olinda-chat-body {
+    /* Chat Messages Body - Explicit Padding & Margin Override */
+    .olinda-chat-messages {
       flex: 1;
-      padding: 16px;
       overflow-y: auto;
-      background: #F5F9FE;
+      padding: 20px !important;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 14px !important;
+      background: var(--blue-50);
     }
 
     .olinda-msg {
-      max-width: 82%;
-      padding: 12px 16px;
-      border-radius: 16px;
-      font-size: 0.9rem;
-      line-height: 1.45;
+      max-width: 85% !important;
+      padding: 12px 16px !important;
+      margin: 0 !important;
+      border-radius: 16px !important;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      white-space: pre-line;
       word-break: break-word;
-      white-space: pre-wrap;
     }
 
     .olinda-msg.bot {
       align-self: flex-start;
-      background: #FFFFFF;
-      color: #1C2B3A;
-      border: 1px solid #D9E6F5;
-      border-bottom-left-radius: 4px;
-      box-shadow: 0 2px 8px rgba(11, 42, 74, 0.05);
+      background: var(--white);
+      border: 1px solid var(--line);
+      color: var(--ink);
     }
 
     .olinda-msg.user {
       align-self: flex-end;
-      background: #14508C;
-      color: #FFFFFF;
-      border-bottom-right-radius: 4px;
+      background: var(--blue-600);
+      color: var(--white);
     }
 
-    /* Typing Dots */
-    .olinda-typing {
+    .olinda-msg.typing {
       align-self: flex-start;
-      background: #FFFFFF;
-      border: 1px solid #D9E6F5;
-      padding: 10px 14px;
-      border-radius: 16px;
-      border-bottom-left-radius: 4px;
-      font-size: 0.8rem;
-      color: #52667A;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
+      color: var(--ink-soft);
+      padding: 12px 16px !important;
+    }
+
+    .olinda-typing-dots {
+      display: inline-flex;
+      gap: 4px;
     }
 
     .olinda-typing-dots span {
       width: 6px;
       height: 6px;
-      background: #5C9FEF;
       border-radius: 50%;
-      display: inline-block;
-      animation: olindaBlink 1.4s infinite ease-in-out both;
-    }
-    .olinda-typing-dots span:nth-child(1) { animation-delay: 0s; }
-    .olinda-typing-dots span:nth-child(2) { animation-delay: 0.2s; }
-    .olinda-typing-dots span:nth-child(3) { animation-delay: 0.4s; }
-
-    @keyframes olindaBlink {
-      0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-      40% { opacity: 1; transform: scale(1.2); }
+      background: var(--blue-400);
+      animation: olinda-typing-bounce 1s infinite ease-in-out;
     }
 
-    /* Suggestions Row */
-    .olinda-suggestions-row {
-      padding: 8px 16px;
-      background: #F5F9FE;
+    .olinda-typing-dots span:nth-child(2) { animation-delay: .15s; }
+    .olinda-typing-dots span:nth-child(3) { animation-delay: .3s; }
+
+    @keyframes olinda-typing-bounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: .5; }
+      30% { transform: translateY(-4px); opacity: 1; }
+    }
+
+    /* Suggestions Area */
+    .olinda-chat-suggestions {
       display: flex;
-      gap: 8px;
-      overflow-x: auto;
-      white-space: nowrap;
-      border-top: 1px solid #E9F2FD;
-    }
-
-    .olinda-chip {
-      background: #FFFFFF;
-      border: 1px solid #5C9FEF;
-      color: #14508C;
-      padding: 6px 12px;
-      border-radius: 20px;
-      font-size: 0.78rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s ease;
+      flex-wrap: wrap;
+      gap: 8px !important;
+      padding: 8px 20px 16px 20px !important;
+      background: var(--blue-50);
       flex-shrink: 0;
     }
 
-    .olinda-chip:hover {
-      background: #14508C;
-      color: #FFFFFF;
-    }
-
-    /* Input Footer */
-    .olinda-chat-footer {
-      padding: 12px 16px;
-      background: #FFFFFF;
-      border-top: 1px solid #D9E6F5;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .olinda-chat-input {
-      flex: 1;
-      border: 1px solid #D9E6F5;
-      border-radius: 12px;
-      padding: 10px 14px;
-      font-size: 0.9rem;
-      outline: none;
-      transition: border 0.2s;
-    }
-
-    .olinda-chat-input:focus {
-      border-color: #14508C;
-    }
-
-    .olinda-send-btn {
-      background: #14508C;
-      color: #FFFFFF;
-      border: none;
-      border-radius: 12px;
-      padding: 10px 16px;
-      font-size: 0.85rem;
-      font-weight: 600;
+    .olinda-chip {
+      font-family: var(--font-body);
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--blue-700);
+      background: var(--blue-100);
+      border: 1px solid var(--blue-400);
+      border-radius: 999px;
+      padding: 8px 14px !important;
+      margin: 0 !important;
       cursor: pointer;
-      transition: background 0.2s;
     }
 
-    .olinda-send-btn:hover {
-      background: #0B2A4A;
+    .olinda-chip:hover {
+      background: var(--blue-400);
+      color: var(--white);
     }
 
-    @keyframes olindaSlideIn {
-      from { opacity: 0; transform: translateX(10px); }
-      to { opacity: 1; transform: translateX(0); }
+    /* Input Footer Area */
+    .olinda-chat-input-row {
+      display: flex;
+      gap: 10px !important;
+      padding: 16px 20px !important;
+      border-top: 1px solid var(--line);
+      background: var(--white);
+      flex-shrink: 0;
+    }
+
+    .olinda-chat-input-row input {
+      flex: 1;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 12px 18px !important;
+      margin: 0 !important;
+      font-family: var(--font-body);
+      font-size: 0.92rem;
+      color: var(--ink);
+      background: var(--blue-50);
+      outline: none;
+    }
+
+    .olinda-chat-input-row input:focus {
+      border-color: var(--blue-400);
+      background: var(--white);
+    }
+
+    .olinda-chat-input-row button {
+      background: var(--blue-600);
+      color: var(--white);
+      border: none;
+      border-radius: 999px;
+      padding: 0 22px !important;
+      margin: 0 !important;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    @media (max-width: 680px) {
+      .olinda-chat-window {
+        right: 12px;
+        left: 12px;
+        bottom: 12px;
+        width: auto;
+        max-width: none;
+        height: min(560px, calc(100vh - 24px));
+      }
     }
   `;
   document.head.appendChild(styleEl);
 
-  // Session ID per tab
+  // Session ID Management
   let sessionId = sessionStorage.getItem('olinda_session_id');
   if (!sessionId) {
-    sessionId = 'sess_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+    sessionId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'sess_' + Date.now();
     sessionStorage.setItem('olinda_session_id', sessionId);
   }
 
-  // Inject Widget DOM Structure
+  // Inject Markup
   const rootEl = document.createElement('div');
   rootEl.id = 'olinda-widget-root';
   rootEl.innerHTML = `
-    <div class="olinda-tooltip-banner" id="olinda-tooltip">
-      👋 Need course advice? Ask Olinda!
-      <button class="olinda-tooltip-close" id="olinda-tooltip-close">×</button>
-    </div>
-
-    <button class="olinda-launcher-btn" id="olinda-launcher" aria-label="Open Hobart College Chatbot">
-      <span class="olinda-avatar-icon">O</span>
-      <span class="olinda-launcher-badge"></span>
+    <button class="olinda-chat-launcher" id="olinda-launcher" aria-label="Open Olinda chat assistant">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1.2-4.2A8 8 0 1 1 21 12Z"/>
+      </svg>
     </button>
 
-    <div class="olinda-chat-window olinda-hidden" id="olinda-window">
+    <div class="olinda-chat-window hidden" id="olinda-window" role="dialog" aria-label="Olinda chat assistant">
       <div class="olinda-chat-header">
-        <div class="olinda-header-info">
-          <div class="olinda-header-avatar">O</div>
+        <div class="olinda-chat-header-info">
+          <span class="olinda-chat-avatar">E</span>
           <div>
-            <div class="olinda-header-title">Olinda Assistant</div>
-            <div class="olinda-header-sub"><span class="olinda-status-dot"></span> Hobart College Official</div>
+            <p class="olinda-chat-name">Olinda</p>
+            <p class="olinda-chat-status"><span class="olinda-status-dot"></span> Online</p>
           </div>
         </div>
-        <button class="olinda-close-btn" id="olinda-close">×</button>
+        <button class="olinda-chat-close" id="olinda-close" aria-label="Close chat">×</button>
       </div>
 
-      <div class="olinda-chat-body" id="olinda-messages"></div>
-      <div class="olinda-suggestions-row" id="olinda-suggestions"></div>
+      <div class="olinda-chat-messages" id="olinda-messages"></div>
+      <div class="olinda-chat-suggestions" id="olinda-suggestions"></div>
 
-      <div class="olinda-chat-footer">
-        <input type="text" class="olinda-chat-input" id="olinda-input" placeholder="Type your course question..." />
-        <button class="olinda-send-btn" id="olinda-send">Send</button>
+      <div class="olinda-chat-input-row">
+        <input type="text" id="olinda-input" placeholder="Type your question…" aria-label="Type your question to Olinda" />
+        <button id="olinda-send">Send</button>
       </div>
     </div>
   `;
   document.body.appendChild(rootEl);
 
-  // References
-  const launcherBtn = document.getElementById('olinda-launcher');
+  const launcher = document.getElementById('olinda-launcher');
   const chatWindow = document.getElementById('olinda-window');
   const closeBtn = document.getElementById('olinda-close');
   const messagesEl = document.getElementById('olinda-messages');
   const suggestionsEl = document.getElementById('olinda-suggestions');
   const inputEl = document.getElementById('olinda-input');
   const sendBtn = document.getElementById('olinda-send');
-  const tooltipEl = document.getElementById('olinda-tooltip');
-  const tooltipCloseBtn = document.getElementById('olinda-tooltip-close');
 
-  let greeted = false;
+  let hasGreeted = false;
 
   const suggestions = [
+    "How do I enrol?",
     "What is TCE?",
     "What is ATAR?",
-    "How do I enrol?",
     "What is VET?",
-    "Contact Student Services"
+    "What courses are available?",
+    "Reset my DECYP password",
+    "Student Services",
+    "UTAS pathways"
   ];
 
+  const welcomeMessage = "👋 Hi! I'm Olinda, Hobart College's virtual assistant.\n\nI can help with:\n• Courses\n• Enrolment\n• TCE\n• ATAR\n• VET\n• Student Services\n\nChoose one of the suggested questions below or type your own.";
+  const offlineAnswer = "I'm having trouble reaching my brain right now. Please try again shortly, or contact Hobart College Student Services directly.";
+
   function addMessage(text, sender) {
-    const bubble = document.createElement('div');
-    bubble.className = `olinda-msg ${sender}`;
+    const bubble = document.createElement("div");
+    bubble.className = "olinda-msg " + sender;
     bubble.textContent = text;
     messagesEl.appendChild(bubble);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
   function showTyping() {
-    const typing = document.createElement('div');
-    typing.className = 'olinda-typing';
-    typing.id = 'olinda-typing-indicator';
-    typing.innerHTML = `Olinda is thinking <div class="olinda-typing-dots"><span></span><span></span><span></span></div>`;
+    const typing = document.createElement("div");
+    typing.className = "olinda-msg typing";
+    typing.id = "olinda-typing-indicator";
+    typing.innerHTML = 'Olinda is typing <span class="olinda-typing-dots"><span></span><span></span><span></span></span>';
     messagesEl.appendChild(typing);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
   function hideTyping() {
-    const typing = document.getElementById('olinda-typing-indicator');
+    const typing = document.getElementById("olinda-typing-indicator");
     if (typing) typing.remove();
   }
 
-  function renderSuggestions() {
-    suggestionsEl.innerHTML = '';
+  function showSuggestions() {
+    suggestionsEl.innerHTML = "";
     suggestions.forEach(text => {
-      const chip = document.createElement('button');
-      chip.className = 'olinda-chip';
+      const chip = document.createElement("button");
+      chip.className = "olinda-chip";
+      chip.type = "button";
       chip.textContent = text;
-      chip.addEventListener('click', () => sendMessage(text));
+      chip.addEventListener("click", () => sendMessage(text));
       suggestionsEl.appendChild(chip);
     });
   }
 
   async function getAnswer(text) {
     try {
-      const res = await fetch(`${BACKEND_URL}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(BACKEND_URL + "/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sessionId, message: text })
       });
-      if (!res.ok) throw new Error(`Status ${res.status}`);
+      if (!res.ok) throw new Error("Backend returned " + res.status);
       const data = await res.json();
       return data.reply;
     } catch (err) {
-      console.error('Olinda Widget Connection Error:', err);
-      return "I'm having trouble connecting right now. Please reach Hobart College Student Services directly at hobart.college@decyp.tas.gov.au or (03) 6220 3133.";
+      console.error("Olinda backend error:", err);
+      return offlineAnswer;
     }
   }
 
@@ -455,49 +444,57 @@
     const trimmed = text.trim();
     if (!trimmed) return;
 
-    addMessage(trimmed, 'user');
-    inputEl.value = '';
+    addMessage(trimmed, "user");
+    inputEl.value = "";
 
     showTyping();
     const reply = await getAnswer(trimmed);
     hideTyping();
-    addMessage(reply, 'bot');
+    addMessage(reply, "bot");
   }
 
   function greet() {
-    if (greeted) return;
-    greeted = true;
-    addMessage("👋 Hi! I'm Olinda, Hobart College's virtual course assistant.\n\nAsk me anything about TASC courses, TCE, ATAR, prerequisites, or campus support!", "bot");
-    renderSuggestions();
+    if (hasGreeted) return;
+    hasGreeted = true;
+    addMessage(welcomeMessage, "bot");
+    showSuggestions();
   }
 
   function openChat() {
-    chatWindow.classList.remove('olinda-hidden');
-    tooltipEl.style.display = 'none';
+    chatWindow.classList.remove("hidden");
+    launcher.classList.add("hidden");
     greet();
     inputEl.focus();
   }
 
   function closeChat() {
-    chatWindow.classList.add('olinda-hidden');
+    chatWindow.classList.add("hidden");
+    launcher.classList.remove("hidden");
   }
 
-  launcherBtn.addEventListener('click', () => {
-    if (chatWindow.classList.contains('olinda-hidden')) {
-      openChat();
-    } else {
-      closeChat();
+  launcher.addEventListener("click", openChat);
+  closeBtn.addEventListener("click", closeChat);
+
+  sendBtn.addEventListener("click", () => sendMessage(inputEl.value));
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") sendMessage(inputEl.value);
+  });
+
+  // Bounce animation loop
+  setInterval(() => {
+    if (chatWindow.classList.contains("hidden")) {
+      launcher.classList.remove("bounce");
+      void launcher.offsetWidth;
+      launcher.classList.add("bounce");
     }
-  });
+  }, 4000);
 
-  closeBtn.addEventListener('click', closeChat);
-  tooltipCloseBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    tooltipEl.style.display = 'none';
-  });
-
-  sendBtn.addEventListener('click', () => sendMessage(inputEl.value));
-  inputEl.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') sendMessage(inputEl.value);
+  // Auto-open 1.5s after load
+  window.addEventListener("load", () => {
+    setTimeout(() => {
+      if (chatWindow.classList.contains("hidden")) {
+        openChat();
+      }
+    }, 1500);
   });
 })();
