@@ -8,7 +8,7 @@
 
   // Determine backend URL from current script tag attributes or fallback to location origin
   const currentScript = document.currentScript || Array.from(document.scripts).find(s => s.src && s.src.includes('widget.js'));
-  const BACKEND_URL = (currentScript && currentScript.getAttribute('data-backend')) || 'http://localhost:8000';
+  const BACKEND_URL = (currentScript && currentScript.getAttribute('data-backend')) || 'https://olinda-ai.onrender.com';
 
   // Inject Styles
   const styleEl = document.createElement('style');
