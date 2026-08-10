@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# NOTE: olinda.db is intentionally NOT ignored — see README "Deploying".
+# It only contains course-guide text + embeddings, no secrets, and Render's
+# free tier wipes local files on restart, so we commit it to survive that.

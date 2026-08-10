@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+google-genai
+groq
+numpy
+python-dotenv
+pdfplumber
+pydantic
+supabase
+python-multipart
+openpyxl

@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.venv/
+backend/venv/
+
+# Secrets — NEVER commit real keys
+backend/.env
+backend/venv/.env.deploy
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Temp uploads (runtime only)
+backend/temp_uploads/

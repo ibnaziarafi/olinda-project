@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "name": "olinda-frontend",
+  "outputDirectory": "frontend",
+  "rewrites": [
+    { "source": "/dashboard", "destination": "/dashboard.html" },
+    { "source": "/widget.js", "destination": "/widget.js" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
+    }
+  ]
+}
