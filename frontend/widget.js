@@ -486,43 +486,60 @@
 
     let html = escapeHtml(md);
 
-    // Process Markdown Tables (| Header | Header |\n|---|---|\n| Cell | Cell |)
+    // Process Markdown Tables
     const lines = html.split("\n");
-    let inTable = false;
-    let tableHtml = "";
     let processed = [];
+    let inTable = false;
+    let tableHtml = [];
+
+    function isTableRow(l) {
+      const s = l.trim();
+      return s.startsWith("|") || (s.includes("|") && s.split("|").length >= 3 && !s.startsWith("http"));
+    }
+
+    function isSeparator(l) {
+      const s = l.trim();
+      return /^\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?$/.test(s);
+    }
 
     for (let i = 0; i < lines.length; i++) {
-      let line = lines[i].trim();
-      if (line.startsWith("|") && line.endsWith("|")) {
-        // Skip table separator row e.g. |---|---|
-        if (line.match(/^\|(?:\s*:?-+:?\s*\|)+$/)) {
+      const rawLine = lines[i].trim();
+
+      if (isTableRow(rawLine)) {
+        if (isSeparator(rawLine)) {
           continue;
         }
-        const cells = line.slice(1, -1).split("|").map(c => c.trim());
+
+        // Extract cells
+        const cells = rawLine.replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim());
+        if (!cells || cells.length === 0 || cells.every(c => c === "")) {
+          continue;
+        }
+
         if (!inTable) {
           inTable = true;
-          tableHtml = '<div class="olinda-table-wrapper"><table class="olinda-table"><thead><tr>';
-          cells.forEach(cell => { tableHtml += `<th>${cell}</th>`; });
-          tableHtml += '</tr></thead><tbody>';
+          tableHtml = ['<div class="olinda-table-wrapper"><table class="olinda-table"><thead><tr>'];
+          cells.forEach(cell => { tableHtml.push(`<th>${cell}</th>`); });
+          tableHtml.push('</tr></thead><tbody>');
         } else {
-          tableHtml += '<tr>';
-          cells.forEach(cell => { tableHtml += `<td>${cell}</td>`; });
-          tableHtml += '</tr>';
+          tableHtml.push('<tr>');
+          cells.forEach(cell => { tableHtml.push(`<td>${cell}</td>`); });
+          tableHtml.push('</tr>');
         }
       } else {
         if (inTable) {
           inTable = false;
-          tableHtml += '</tbody></table></div>';
-          processed.push(tableHtml);
-          tableHtml = "";
+          tableHtml.push('</tbody></table></div>');
+          processed.push(tableHtml.join(""));
+          tableHtml = [];
         }
-        processed.push(line);
+        processed.push(lines[i]);
       }
     }
+
     if (inTable) {
-      tableHtml += '</tbody></table></div>';
-      processed.push(tableHtml);
+      tableHtml.push('</tbody></table></div>');
+      processed.push(tableHtml.join(""));
     }
 
     html = processed.join("\n");
