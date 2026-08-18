@@ -311,6 +311,22 @@ groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
 init_db()
 
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+
+@app.get("/static/widget.js")
+def get_widget_js():
+    widget_file = FRONTEND_DIR / "widget.js"
+    if widget_file.exists():
+        return FileResponse(
+            widget_file,
+            media_type="application/javascript",
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
+    raise HTTPException(status_code=404, detail="widget.js not found")
+
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
