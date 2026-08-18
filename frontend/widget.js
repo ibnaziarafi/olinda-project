@@ -208,6 +208,59 @@
       background: var(--white);
       border: 1px solid var(--line);
       color: var(--ink);
+      width: 100%;
+      max-width: 90% !important;
+    }
+
+    /* Markdown Tables & Lists inside Assistant Bubbles */
+    .olinda-table-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      margin: 10px 0;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+    }
+
+    .olinda-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      text-align: left;
+    }
+
+    .olinda-table th {
+      background: var(--navy);
+      color: var(--white);
+      padding: 8px 10px;
+      font-weight: 600;
+      font-family: var(--font-body);
+    }
+
+    .olinda-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      background: var(--white);
+      color: var(--ink);
+      line-height: 1.45;
+    }
+
+    .olinda-table tr:nth-child(even) td {
+      background: var(--blue-50);
+    }
+
+    .olinda-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .olinda-list {
+      margin: 8px 0;
+      padding-left: 20px;
+    }
+
+    .olinda-msg.bot a {
+      color: var(--blue-600);
+      font-weight: 600;
+      text-decoration: underline;
     }
 
     .olinda-msg.user {
@@ -419,10 +472,90 @@
   const welcomeMessage = "👋 Hi! I'm Olinda, Hobart College's virtual assistant.\n\nI can help with:\n• Courses\n• Enrolment\n• TCE\n• ATAR\n• VET\n• Student Services\n\nChoose one of the suggested questions below or type your own.";
   const offlineAnswer = "I'm having trouble reaching my brain right now. Please try again shortly, or contact Hobart College Student Services directly.";
 
+  function escapeHtml(str) {
+    return (str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function parseMarkdown(md) {
+    if (!md) return "";
+
+    let html = escapeHtml(md);
+
+    // Process Markdown Tables (| Header | Header |\n|---|---|\n| Cell | Cell |)
+    const lines = html.split("\n");
+    let inTable = false;
+    let tableHtml = "";
+    let processed = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].trim();
+      if (line.startsWith("|") && line.endsWith("|")) {
+        // Skip table separator row e.g. |---|---|
+        if (line.match(/^\|(?:\s*:?-+:?\s*\|)+$/)) {
+          continue;
+        }
+        const cells = line.slice(1, -1).split("|").map(c => c.trim());
+        if (!inTable) {
+          inTable = true;
+          tableHtml = '<div class="olinda-table-wrapper"><table class="olinda-table"><thead><tr>';
+          cells.forEach(cell => { tableHtml += `<th>${cell}</th>`; });
+          tableHtml += '</tr></thead><tbody>';
+        } else {
+          tableHtml += '<tr>';
+          cells.forEach(cell => { tableHtml += `<td>${cell}</td>`; });
+          tableHtml += '</tr>';
+        }
+      } else {
+        if (inTable) {
+          inTable = false;
+          tableHtml += '</tbody></table></div>';
+          processed.push(tableHtml);
+          tableHtml = "";
+        }
+        processed.push(line);
+      }
+    }
+    if (inTable) {
+      tableHtml += '</tbody></table></div>';
+      processed.push(tableHtml);
+    }
+
+    html = processed.join("\n");
+
+    // Format Bold (**text** or __text__)
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/__(.*?)__/g, '<strong>$1</strong>');
+
+    // Format Italic (*text* or _text_)
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+    // Format Markdown Links ([title](url))
+    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+    // Format Bullet Lists (- item or • item)
+    html = html.replace(/^(?:[\-\•]\s*)(.+)$/gm, '<li>$1</li>');
+    html = html.replace(/((?:<li>.*<\/li>\s*)+)/g, '<ul class="olinda-list">$1</ul>');
+
+    // Convert line breaks
+    html = html.replace(/\n\n/g, '<br><br>');
+    html = html.replace(/\n/g, '<br>');
+
+    return html;
+  }
+
   function addMessage(text, sender, actionLinks = null, inlineSuggestions = null) {
     const bubble = document.createElement("div");
     bubble.className = "olinda-msg " + sender;
-    bubble.textContent = text;
+    if (sender === "user") {
+      bubble.textContent = text;
+    } else {
+      bubble.innerHTML = parseMarkdown(text);
+    }
 
     // Render course redirect buttons dynamically inline inside the assistant message card
     if (sender === "bot" && actionLinks && actionLinks.length > 0) {
