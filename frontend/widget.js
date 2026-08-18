@@ -6,9 +6,10 @@
   if (window.OlindaWidgetInitialized) return;
   window.OlindaWidgetInitialized = true;
 
-  // Determine backend URL from script tag attributes or fallback
+  // Determine backend URL from script tag attributes or fallback to window origin
   const currentScript = document.currentScript || Array.from(document.scripts).find(s => s.src && s.src.includes('widget.js'));
-  const BACKEND_URL = (currentScript && currentScript.getAttribute('data-backend')) || 'https://olinda-ai.onrender.com';
+  const attrBackend = currentScript && currentScript.getAttribute('data-backend');
+  const BACKEND_URL = attrBackend || (window.location.origin && window.location.origin !== 'null' ? window.location.origin : 'https://olinda-ai.onrender.com');
 
   // Inject Custom Styles with Forced Internal Margins and Padding
   const styleEl = document.createElement('style');

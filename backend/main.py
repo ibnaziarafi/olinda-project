@@ -33,7 +33,7 @@ from ingest import ingest_file, chunk_text, embed_chunks
 load_dotenv()
 
 DB_PATH = os.getenv("OLINDA_DB_PATH", "olinda.db")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "groq/compound")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "gemini-embedding-001")
 EMBED_DIMENSIONS = int(os.getenv("EMBED_DIMENSIONS", "768"))
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.65"))
@@ -456,14 +456,34 @@ def chat(req: ChatRequest):
     else:
         llm_messages.append({"role": "user", "content": safe_message})
 
+    reply = None
+    target_model = GROQ_MODEL or "groq/compound"
     try:
         response = groq_client.chat.completions.create(
-            model=GROQ_MODEL,
+            model=target_model,
             messages=llm_messages,
             temperature=0.3,
         )
         reply = response.choices[0].message.content
     except Exception as e:
+        print(f"Groq API primary model ({target_model}) error: {e}")
+        fallback_models = ["groq/compound", "groq/compound-mini", "qwen/qwen3.6-27b", "openai/gpt-oss-120b"]
+        for fb_model in fallback_models:
+            if fb_model == target_model:
+                continue
+            try:
+                print(f"Attempting fallback model: {fb_model}")
+                response = groq_client.chat.completions.create(
+                    model=fb_model,
+                    messages=llm_messages,
+                    temperature=0.3,
+                )
+                reply = response.choices[0].message.content
+                break
+            except Exception as fb_err:
+                print(f"Fallback model ({fb_model}) failed: {fb_err}")
+
+    if not reply:
         reply = f"I encountered a temporary problem generating an answer. Please contact Student Services ({STUDENT_SERVICES_CONTACT})."
 
     log_message(req.session_id, safe_message, reply, top_score, False, conn)
