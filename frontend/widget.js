@@ -245,14 +245,44 @@
       30% { transform: translateY(-4px); opacity: 1; }
     }
 
-    /* Suggestions Area */
-    .olinda-chat-suggestions {
+    /* Inline Action Links & Inline Suggestions inside message cards */
+    .olinda-action-links {
       display: flex;
       flex-wrap: wrap;
       gap: 8px !important;
-      padding: 8px 20px 16px 20px !important;
-      background: var(--blue-50);
-      flex-shrink: 0;
+      margin-top: 12px !important;
+      padding-top: 10px !important;
+      border-top: 1px solid var(--line);
+    }
+
+    .olinda-action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-body);
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--blue-700);
+      background: var(--blue-100);
+      border: 1px solid var(--blue-400);
+      border-radius: 8px;
+      padding: 6px 12px !important;
+      text-decoration: none;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .olinda-action-btn:hover {
+      background: var(--blue-600);
+      color: var(--white);
+    }
+
+    .olinda-inline-suggestions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px !important;
+      margin-top: 12px !important;
+      padding-top: 10px !important;
+      border-top: 1px solid var(--line);
     }
 
     .olinda-chip {
@@ -263,7 +293,7 @@
       background: var(--blue-100);
       border: 1px solid var(--blue-400);
       border-radius: 999px;
-      padding: 8px 14px !important;
+      padding: 6px 12px !important;
       margin: 0 !important;
       cursor: pointer;
     }
@@ -356,7 +386,6 @@
       </div>
 
       <div class="olinda-chat-messages" id="olinda-messages"></div>
-      <div class="olinda-chat-suggestions" id="olinda-suggestions"></div>
 
       <div class="olinda-chat-input-row">
         <input type="text" id="olinda-input" placeholder="Type your question…" aria-label="Type your question to Olinda" />
@@ -370,7 +399,6 @@
   const chatWindow = document.getElementById('olinda-window');
   const closeBtn = document.getElementById('olinda-close');
   const messagesEl = document.getElementById('olinda-messages');
-  const suggestionsEl = document.getElementById('olinda-suggestions');
   const inputEl = document.getElementById('olinda-input');
   const sendBtn = document.getElementById('olinda-send');
 
@@ -390,10 +418,42 @@
   const welcomeMessage = "👋 Hi! I'm Olinda, Hobart College's virtual assistant.\n\nI can help with:\n• Courses\n• Enrolment\n• TCE\n• ATAR\n• VET\n• Student Services\n\nChoose one of the suggested questions below or type your own.";
   const offlineAnswer = "I'm having trouble reaching my brain right now. Please try again shortly, or contact Hobart College Student Services directly.";
 
-  function addMessage(text, sender) {
+  function addMessage(text, sender, actionLinks = null, inlineSuggestions = null) {
     const bubble = document.createElement("div");
     bubble.className = "olinda-msg " + sender;
     bubble.textContent = text;
+
+    // Render course redirect buttons dynamically inline inside the assistant message card
+    if (sender === "bot" && actionLinks && actionLinks.length > 0) {
+      const actionsContainer = document.createElement("div");
+      actionsContainer.className = "olinda-action-links";
+      actionLinks.forEach(link => {
+        const btn = document.createElement("a");
+        btn.className = "olinda-action-btn";
+        btn.href = link.url;
+        btn.target = "_blank";
+        btn.rel = "noopener noreferrer";
+        btn.textContent = (link.title || "View Course Details") + " →";
+        actionsContainer.appendChild(btn);
+      });
+      bubble.appendChild(actionsContainer);
+    }
+
+    // Render inline quick prompt suggestions if provided
+    if (sender === "bot" && inlineSuggestions && inlineSuggestions.length > 0) {
+      const sugContainer = document.createElement("div");
+      sugContainer.className = "olinda-inline-suggestions";
+      inlineSuggestions.forEach(text => {
+        const chip = document.createElement("button");
+        chip.className = "olinda-chip";
+        chip.type = "button";
+        chip.textContent = text;
+        chip.addEventListener("click", () => sendMessage(text));
+        sugContainer.appendChild(chip);
+      });
+      bubble.appendChild(sugContainer);
+    }
+
     messagesEl.appendChild(bubble);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
@@ -412,31 +472,44 @@
     if (typing) typing.remove();
   }
 
-  function showSuggestions() {
-    suggestionsEl.innerHTML = "";
-    suggestions.forEach(text => {
-      const chip = document.createElement("button");
-      chip.className = "olinda-chip";
-      chip.type = "button";
-      chip.textContent = text;
-      chip.addEventListener("click", () => sendMessage(text));
-      suggestionsEl.appendChild(chip);
-    });
+  // Session History Management
+  const HISTORY_KEY = 'olinda_chat_history';
+
+  function getHistory() {
+    try {
+      const raw = sessionStorage.getItem(HISTORY_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      console.error("Error reading chat history from sessionStorage", e);
+      return [];
+    }
   }
 
-  async function getAnswer(text) {
+  function saveHistory(history) {
+    try {
+      sessionStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    } catch (e) {
+      console.error("Error saving chat history to sessionStorage", e);
+    }
+  }
+
+  async function getAnswer(query, history) {
     try {
       const res = await fetch(BACKEND_URL + "/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId, message: text })
+        body: JSON.stringify({
+          session_id: sessionId,
+          query: query,
+          messages: history
+        })
       });
       if (!res.ok) throw new Error("Backend returned " + res.status);
       const data = await res.json();
-      return data.reply;
+      return { reply: data.reply, action_links: data.action_links || null };
     } catch (err) {
       console.error("Olinda backend error:", err);
-      return offlineAnswer;
+      return { reply: offlineAnswer, action_links: null };
     }
   }
 
@@ -447,17 +520,49 @@
     addMessage(trimmed, "user");
     inputEl.value = "";
 
+    // 1. Read existing history from sessionStorage
+    let history = getHistory();
+
+    // 2. Append new user message
+    history.push({ role: "user", content: trimmed });
+
+    // 3. Trim window to most recent 10 messages (5 turns)
+    if (history.length > 10) {
+      history = history.slice(-10);
+    }
+
     showTyping();
-    const reply = await getAnswer(trimmed);
+    // 4. Send full trimmed history array along with latest user query to backend
+    const res = await getAnswer(trimmed, history);
     hideTyping();
-    addMessage(reply, "bot");
+    addMessage(res.reply, "bot", res.action_links);
+
+    // 5. Save updated history (including assistant's reply and action_links) back to sessionStorage
+    history.push({ role: "assistant", content: res.reply, action_links: res.action_links });
+    if (history.length > 10) {
+      history = history.slice(-10);
+    }
+    saveHistory(history);
+  }
+
+  function restoreSessionHistory() {
+    const history = getHistory();
+    if (history.length > 0) {
+      hasGreeted = true;
+      messagesEl.innerHTML = "";
+      history.forEach(msg => {
+        addMessage(msg.content, msg.role === "assistant" ? "bot" : "user", msg.action_links || null);
+      });
+      return true;
+    }
+    return false;
   }
 
   function greet() {
     if (hasGreeted) return;
+    if (restoreSessionHistory()) return;
     hasGreeted = true;
-    addMessage(welcomeMessage, "bot");
-    showSuggestions();
+    addMessage(welcomeMessage, "bot", null, suggestions);
   }
 
   function openChat() {

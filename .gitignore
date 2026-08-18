@@ -21,3 +21,8 @@ Thumbs.db
 
 # Temp uploads (runtime only)
 backend/temp_uploads/
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3

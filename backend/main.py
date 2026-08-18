@@ -17,6 +17,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 import numpy as np
+from typing import List, Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -316,17 +317,52 @@ if FRONTEND_DIR.exists():
 
 # ---------------------------------------------------------------------------
 # Data Models
-# ---------------------------------------------------------------------------
+class ActionLink(BaseModel):
+    title: str
+    url: str
+
+
+class MessageItem(BaseModel):
+    role: str
+    content: str
+
 
 class ChatRequest(BaseModel):
-    session_id: str
-    message: str
+    session_id: str = "default_session"
+    messages: List[MessageItem] = []
+    query: Optional[str] = None
+    message: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
     reply: str
     escalated: bool
     confidence: float
+    action_links: Optional[List[ActionLink]] = None
+
+
+def extract_action_links(chunks: list[str]) -> Optional[list[ActionLink]]:
+    if not chunks:
+        return None
+
+    url_pattern = re.compile(r'https?://[^\s<>"\'\)]+')
+    links = []
+    seen = set()
+
+    for chunk in chunks:
+        matches = url_pattern.findall(chunk)
+        for url in matches:
+            clean_url = url.rstrip(".,;")
+            if clean_url not in seen:
+                seen.add(clean_url)
+                title = "View Course Details"
+                if "tasc.tas.gov.au" in clean_url:
+                    title = "View TASC Course Details"
+                elif "hobartcollege" in clean_url:
+                    title = "Visit Hobart College Page"
+                links.append(ActionLink(title=title, url=clean_url))
+
+    return links if links else None
 
 
 class ResolveUnansweredRequest(BaseModel):
@@ -367,16 +403,31 @@ def get_dashboard():
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     conn = get_db()
-    safe_message = redact_pii(req.message.strip())
+
+    # Determine latest user query from query, message, or last user role in messages
+    user_query = req.query or req.message
+    if not user_query and req.messages:
+        for m in reversed(req.messages):
+            if m.role == "user":
+                user_query = m.content
+                break
+        if not user_query:
+            user_query = req.messages[-1].content
+
+    if not user_query or not user_query.strip():
+        conn.close()
+        raise HTTPException(status_code=400, detail="Query string is required")
+
+    safe_message = redact_pii(user_query.strip())
 
     # 1. Check escalation patterns
     if check_escalation(safe_message):
         reply = f"For this you'll need Student Services directly: {STUDENT_SERVICES_CONTACT}."
         log_message(req.session_id, safe_message, reply, 0.0, True, conn)
         conn.close()
-        return ChatResponse(reply=reply, escalated=True, confidence=0.0)
+        return ChatResponse(reply=reply, escalated=True, confidence=0.0, action_links=None)
 
-    # 2. Retrieve relevant context
+    # 2. Retrieve relevant context using latest user query
     chunks, top_score = retrieve_context(safe_message, conn)
 
     # 3. Low confidence check
@@ -388,17 +439,27 @@ def chat(req: ChatRequest):
         )
         log_message(req.session_id, safe_message, reply, top_score, False, conn)
         conn.close()
-        return ChatResponse(reply=reply, escalated=False, confidence=top_score)
+        return ChatResponse(reply=reply, escalated=False, confidence=top_score, action_links=None)
 
-    # 4. Generate factual answer using Groq LLM
+    # 4. Extract valid action links from chunks
+    action_links = extract_action_links(chunks)
+
+    # 5. Generate factual answer using Groq LLM with system prompt + RAG context + message history
     context = "\n\n---\n\n".join(chunks)
+    system_content = f"{SYSTEM_PROMPT}\n\nContext:\n{context}"
+    llm_messages = [{"role": "system", "content": system_content}]
+
+    if req.messages:
+        for msg in req.messages:
+            role = "assistant" if msg.role in ["assistant", "bot"] else "user"
+            llm_messages.append({"role": role, "content": redact_pii(msg.content)})
+    else:
+        llm_messages.append({"role": "user", "content": safe_message})
+
     try:
         response = groq_client.chat.completions.create(
             model=GROQ_MODEL,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {safe_message}"},
-            ],
+            messages=llm_messages,
             temperature=0.3,
         )
         reply = response.choices[0].message.content
@@ -407,7 +468,7 @@ def chat(req: ChatRequest):
 
     log_message(req.session_id, safe_message, reply, top_score, False, conn)
     conn.close()
-    return ChatResponse(reply=reply, escalated=False, confidence=top_score)
+    return ChatResponse(reply=reply, escalated=False, confidence=top_score, action_links=action_links)
 
 
 # ---------------------------------------------------------------------------
