@@ -347,6 +347,7 @@ def generate_llm_response(messages):
                 messages=messages,
                 temperature=0.2,
                 max_tokens=700,
+                reasoning_effort="none",
             )
             reply = response.choices[0].message.content
             if reply:
