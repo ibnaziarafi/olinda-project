@@ -497,6 +497,8 @@
 
   const welcomeMessage = "👋 Hi! I'm Olinda, Hobart College's virtual assistant.\n\nI can help with:\n• Courses\n• Enrolment\n• TCE\n• ATAR\n• VET\n• Student Services\n\nChoose one of the suggested questions below or type your own.";
   const offlineAnswer = "I'm having trouble reaching my brain right now. Please try again shortly, or contact Hobart College Student Services directly.";
+  const timeoutAnswer = "This is taking longer than usual — I may be waking up after a quiet period. Please try asking again in a moment.";
+  const REQUEST_TIMEOUT_MS = 20000;
   let isSending = false;
 
   function escapeHtml(str) {
@@ -679,6 +681,8 @@
   }
 
   async function getAnswer(query, history) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
       const payload = {
         session_id: sessionId,
@@ -689,7 +693,8 @@
       const res = await fetch(BACKEND_URL + "/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
       });
       if (!res.ok) throw new Error("Backend returned " + res.status);
       const data = await res.json();
@@ -710,7 +715,10 @@
       };
     } catch (err) {
       console.error("[OLINDA] Backend request/response error:", err);
-      return { reply: offlineAnswer, action_links: null, transient: true };
+      const timedOut = err && err.name === "AbortError";
+      return { reply: timedOut ? timeoutAnswer : offlineAnswer, action_links: null, transient: true };
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
