@@ -199,8 +199,8 @@
       border-radius: 16px !important;
       font-size: 0.92rem;
       line-height: 1.5;
-      white-space: pre-line;
       word-break: break-word;
+      overflow-wrap: break-word;
     }
 
     .olinda-msg.bot {
@@ -212,17 +212,20 @@
       max-width: 90% !important;
     }
 
-    /* Markdown Tables & Lists inside Assistant Bubbles */
+    /* Markdown Tables Container & Formatting */
     .olinda-table-wrapper {
       width: 100%;
-      overflow-x: auto;
+      max-width: 100%;
+      overflow-x: auto; /* Isolated horizontal scrolling strictly for table */
+      -webkit-overflow-scrolling: touch;
       margin: 10px 0;
-      border-radius: 10px;
+      border-radius: 8px;
       border: 1px solid var(--line);
     }
 
     .olinda-table {
-      width: 100%;
+      width: max-content;
+      min-width: 100%;
       border-collapse: collapse;
       font-size: 0.82rem;
       text-align: left;
@@ -234,6 +237,7 @@
       padding: 8px 10px;
       font-weight: 600;
       font-family: var(--font-body);
+      white-space: nowrap; /* Prevents column header text from wrapping */
     }
 
     .olinda-table td {
@@ -242,6 +246,7 @@
       background: var(--white);
       color: var(--ink);
       line-height: 1.45;
+      white-space: nowrap; /* Keeps rows intact so table expands horizontally */
     }
 
     .olinda-table tr:nth-child(even) td {
@@ -250,6 +255,20 @@
 
     .olinda-table tr:last-child td {
       border-bottom: none;
+    }
+
+    /* Custom scrollbar for scrollable tables */
+    .olinda-table-wrapper::-webkit-scrollbar {
+      height: 5px;
+    }
+
+    .olinda-table-wrapper::-webkit-scrollbar-thumb {
+      background: var(--blue-400);
+      border-radius: 3px;
+    }
+
+    .olinda-table-wrapper::-webkit-scrollbar-track {
+      background: var(--blue-50);
     }
 
     .olinda-list {
@@ -267,6 +286,7 @@
       align-self: flex-end;
       background: var(--blue-600);
       color: var(--white);
+      white-space: pre-line;
     }
 
     .olinda-msg.typing {
@@ -558,7 +578,7 @@
     html = html.replace(/^(?:[\-\•]\s*)(.+)$/gm, '<li>$1</li>');
     html = html.replace(/((?:<li>.*<\/li>\s*)+)/g, '<ul class="olinda-list">$1</ul>');
 
-    // Convert line breaks
+    // Convert line breaks while leaving table wrappers clean
     html = html.replace(/\n\n/g, '<br><br>');
     html = html.replace(/\n/g, '<br>');
 
