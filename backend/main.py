@@ -44,7 +44,7 @@ MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "8"))
 MAX_RECENT_MESSAGES = int(os.getenv("MAX_RECENT_MESSAGES", "4"))
 MAX_SUMMARY_TOKENS = int(os.getenv("MAX_SUMMARY_TOKENS", "400"))
 MAX_SUMMARY_WORDS = 300
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")

@@ -18,7 +18,7 @@ services:
       - key: GROQ_MODEL
         value: qwen/qwen3.6-27b
       - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+        value: gemini-3.6-flash
       - key: EMBED_MODEL
         value: gemini-embedding-001
       - key: EMBED_DIMENSIONS
