@@ -13,12 +13,15 @@
 <style>
   /* Colors, fonts and spacing used everywhere */
   :root{
-    --navy: #0B2A4A;
+    /* Official Hobart College brand colours (Pantone 7686C navy / 7409C gold) */
+    --navy: #1B4C8C;
     --blue-700: #14508C;
     --blue-600: #1E6FD9;
     --blue-400: #5C9FEF;
     --blue-100: #E9F2FD;
     --blue-50:  #F5F9FE;
+    --gold: #F5A81C;
+    --gold-soft: #FCE6BB;
     --white: #FFFFFF;
     --ink: #1C2B3A;
     --ink-soft: #52667A;
@@ -195,7 +198,7 @@
     background: linear-gradient(155deg, var(--blue-600), var(--navy));
     color:#fff; display:flex; align-items:center; justify-content:center;
     cursor:pointer; box-shadow: var(--shadow-soft);
-    border: none;
+    border: 3px solid var(--gold);
   }
   .chat-launcher svg{ width:26px; height:26px; }
   .chat-launcher.bounce{ animation: launcher-bounce 0.9s ease; }
@@ -222,10 +225,11 @@
     background: linear-gradient(155deg, var(--blue-700), var(--navy));
     color:#fff; padding: 16px 18px; display:flex; align-items:center; justify-content:space-between;
     flex-shrink:0;
+    border-bottom: 3px solid var(--gold);
   }
   .chat-header-info{ display:flex; align-items:center; gap:12px; }
   .chat-avatar{
-    width:38px; height:38px; border-radius:50%; background: rgba(255,255,255,0.16);
+    width:38px; height:38px; border-radius:50%; background: var(--gold); color: var(--navy);
     display:flex; align-items:center; justify-content:center; font-family: var(--font-display);
     font-weight:600; font-size:1rem;
   }
@@ -286,7 +290,7 @@
     background: var(--blue-100); border: 1px solid var(--blue-400); border-radius: 999px;
     padding: 7px 13px; cursor:pointer;
   }
-  .chip:hover{ background: var(--blue-400); color:#fff; }
+  .chip:hover{ background: var(--gold); border-color: var(--gold); color: var(--navy); }
 
   .chat-input-row{
     display:flex; gap:10px; padding: 14px; border-top: 1px solid var(--line); background:#fff; flex-shrink:0;
@@ -444,7 +448,7 @@
 <div class="chat-window" id="chat-window" role="dialog" aria-label="Olinda chat assistant" hidden>
   <div class="chat-header">
     <div class="chat-header-info">
-      <span class="chat-avatar">E</span>
+      <span class="chat-avatar">O</span>
       <div>
         <p class="chat-name">Olinda</p>
         <p class="chat-status"><span class="status-dot"></span> Online</p>
