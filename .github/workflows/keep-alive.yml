@@ -1,0 +1,19 @@
+name: Keep Render backend awake
+
+# Render's free tier puts the backend to sleep after 15 minutes with no
+# traffic, and the first request after that can take 30-90 seconds to
+# wake it back up. Pinging it regularly keeps it warm so students get
+# fast replies instead of a slow "waking up" response.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health
+        continue-on-error: true
+        run: curl -sS --max-time 30 https://olinda-ai.onrender.com/health
