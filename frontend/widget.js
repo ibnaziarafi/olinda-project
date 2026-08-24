@@ -17,13 +17,13 @@
     /* Widget Colors & Variables */
     #olinda-widget-root {
       /* Official Hobart College brand colours (Pantone 7686C navy / 7409C gold) */
-      --navy: #1B4C8C;
+      --navy: #0D4A83;
       --blue-700: #14508C;
       --blue-600: #1E6FD9;
       --blue-400: #5C9FEF;
       --blue-100: #E9F2FD;
       --blue-50:  #F5F9FE;
-      --gold: #F5A81C;
+      --gold: #F0B51B;
       --gold-soft: #FCE6BB;
       --white: #FFFFFF;
       --ink: #1C2B3A;
@@ -137,14 +137,22 @@
       width: 38px;
       height: 38px;
       border-radius: 50%;
-      background: var(--gold);
-      color: var(--navy);
+      background: var(--navy);
+      border: 2px solid var(--gold);
       display: flex;
       align-items: center;
       justify-content: center;
       font-family: var(--font-display);
       font-weight: 600;
       font-size: 1rem;
+      overflow: hidden;
+    }
+
+    .olinda-chat-avatar img {
+      width: 62%;
+      height: 62%;
+      object-fit: contain;
+      display: block;
     }
 
     .olinda-chat-name {
@@ -456,7 +464,7 @@
     <div class="olinda-chat-window hidden" id="olinda-window" role="dialog" aria-label="Olinda chat assistant">
       <div class="olinda-chat-header">
         <div class="olinda-chat-header-info">
-          <span class="olinda-chat-avatar">O</span>
+          <span class="olinda-chat-avatar"><img src="${BACKEND_URL}/static/assets/hoco-mark-white.png" alt="" aria-hidden="true"></span>
           <div>
             <p class="olinda-chat-name">Olinda</p>
             <p class="olinda-chat-status"><span class="olinda-status-dot"></span> Online</p>
