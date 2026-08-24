@@ -574,7 +574,12 @@ def chat(req: ChatRequest):
     if not reply:
         reply = f"I encountered a temporary problem generating an answer. Please contact Student Services ({STUDENT_SERVICES_CONTACT})."
     else:
+        raw_reply_length = len(reply)
         reply = clean_llm_response(reply)
+        print(
+            f"[CHAT] LLM raw response chars: {raw_reply_length} | "
+            f"clean response chars: {len(reply)}"
+        )
         if not reply:
             reply = f"I encountered a temporary problem generating an answer. Please contact Student Services ({STUDENT_SERVICES_CONTACT})."
 
