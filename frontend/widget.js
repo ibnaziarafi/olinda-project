@@ -583,8 +583,8 @@
     // Format Markdown Links ([title](url))
     html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
 
-    // Format Bullet Lists (- item or • item)
-    html = html.replace(/^(?:[\-\•]\s*)(.+)$/gm, '<li>$1</li>');
+    // Format Bullet Lists (- item, • item, or * item)
+    html = html.replace(/^(?:[\-\•\*]\s+)(.+)$/gm, '<li>$1</li>');
     html = html.replace(/((?:<li>.*<\/li>\s*)+)/g, '<ul class="olinda-list">$1</ul>');
 
     // Convert line breaks while leaving table wrappers clean
@@ -728,6 +728,11 @@
     isSending = true;
 
     try {
+      // Once the user asks something, the starter suggestion chips have
+      // done their job - remove them so they don't linger in the
+      // scrollable history and clutter up the conversation.
+      document.querySelectorAll('.olinda-inline-suggestions').forEach(el => el.remove());
+
       addMessage(trimmed, "user");
       inputEl.value = "";
 
