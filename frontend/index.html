@@ -248,9 +248,25 @@
   .msg{
     max-width: 82%; padding: 11px 14px; border-radius: 16px; font-size:0.92rem; line-height:1.45;
     white-space: pre-line;
+    word-break: break-word;
+    overflow-wrap: break-word;
   }
-  .msg.bot{ align-self:flex-start; background:#fff; border:1px solid var(--line); color: var(--ink); }
+  .msg.bot{ align-self:flex-start; background:#fff; border:1px solid var(--line); color: var(--ink); width: 100%; max-width: 90%; }
   .msg.user{ align-self:flex-end; background: var(--blue-600); color:#fff; }
+  .msg.bot a{ color: var(--blue-600); font-weight:600; text-decoration:underline; }
+  .msg-list{ margin: 8px 0; padding-left: 20px; }
+
+  /* Markdown tables: scroll sideways inside their own box instead of
+     forcing the whole chat window wider than the phone screen. */
+  .olinda-table-wrapper{
+    width:100%; max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch;
+    margin:10px 0; border-radius:8px; border:1px solid var(--line);
+  }
+  .olinda-table{ width:max-content; min-width:100%; border-collapse:collapse; font-size:0.82rem; text-align:left; }
+  .olinda-table th{ background: var(--navy); color:#fff; padding:8px 10px; font-weight:600; white-space:nowrap; }
+  .olinda-table td{ padding:8px 10px; border-bottom:1px solid var(--line); background:#fff; color:var(--ink); white-space:nowrap; }
+  .olinda-table tr:nth-child(even) td{ background: var(--blue-50); }
+  .olinda-table tr:last-child td{ border-bottom:none; }
 
   .msg.typing{ align-self:flex-start; display:flex; align-items:center; gap:6px; color: var(--ink-soft); }
   .typing-dots{ display:inline-flex; gap:3px; }
@@ -507,11 +523,87 @@ async function getAnswer(text) {
   }
 }
 
+// Turn the plain text the backend sends into safe HTML, then turn
+// **bold**, - bullet lists, [links](url) and | tables | into real
+// formatting instead of showing the raw markdown symbols.
+function escapeHtml(str) {
+  return (str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function parseMarkdown(md) {
+  if (!md) return "";
+  let html = escapeHtml(md);
+
+  // Tables
+  const lines = html.split("\n");
+  let processed = [];
+  let inTable = false;
+  let tableHtml = [];
+  function isTableRow(l) {
+    const s = l.trim();
+    return s.startsWith("|") || (s.includes("|") && s.split("|").length >= 3 && !s.startsWith("http"));
+  }
+  function isSeparator(l) {
+    const s = l.trim();
+    return /^\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?$/.test(s);
+  }
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i].trim();
+    if (isTableRow(rawLine)) {
+      if (isSeparator(rawLine)) continue;
+      const cells = rawLine.replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim());
+      if (!cells.length || cells.every(c => c === "")) continue;
+      if (!inTable) {
+        inTable = true;
+        tableHtml = ['<div class="olinda-table-wrapper"><table class="olinda-table"><thead><tr>'];
+        cells.forEach(cell => tableHtml.push(`<th>${cell}</th>`));
+        tableHtml.push('</tr></thead><tbody>');
+      } else {
+        tableHtml.push('<tr>');
+        cells.forEach(cell => tableHtml.push(`<td>${cell}</td>`));
+        tableHtml.push('</tr>');
+      }
+    } else {
+      if (inTable) {
+        inTable = false;
+        tableHtml.push('</tbody></table></div>');
+        processed.push(tableHtml.join(""));
+        tableHtml = [];
+      }
+      processed.push(lines[i]);
+    }
+  }
+  if (inTable) {
+    tableHtml.push('</tbody></table></div>');
+    processed.push(tableHtml.join(""));
+  }
+  html = processed.join("\n");
+
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__(.*?)__/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  html = html.replace(/^(?:[\-\•]\s*)(.+)$/gm, '<li>$1</li>');
+  html = html.replace(/((?:<li>.*<\/li>\s*)+)/g, '<ul class="msg-list">$1</ul>');
+  html = html.replace(/\n\n/g, '<br><br>');
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
 // Add one chat bubble to the screen
 function addMessage(text, sender) {
   const bubble = document.createElement("div");
   bubble.className = "msg " + sender;
-  bubble.textContent = text;
+  if (sender === "user") {
+    bubble.textContent = text;
+  } else {
+    bubble.innerHTML = parseMarkdown(text);
+  }
   messagesEl.appendChild(bubble);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
