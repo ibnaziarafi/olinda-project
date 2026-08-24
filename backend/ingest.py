@@ -27,6 +27,7 @@ DB_PATH = os.getenv("OLINDA_DB_PATH", "olinda.db")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "gemini-embedding-001")
 EMBED_DIMENSIONS = int(os.getenv("EMBED_DIMENSIONS", "768"))
 BATCH_SIZE = 20  # chunks per API call
+EMBED_RETRIES = 3
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -48,14 +49,23 @@ def embed_chunks(chunks: list[str]) -> list[list[float]]:
     all_embeddings = []
     for i in range(0, len(chunks), BATCH_SIZE):
         batch = chunks[i : i + BATCH_SIZE]
-        result = client.models.embed_content(
-            model=EMBED_MODEL,
-            contents=batch,
-            config=genai_types.EmbedContentConfig(
-                output_dimensionality=EMBED_DIMENSIONS,
-                task_type="RETRIEVAL_DOCUMENT",
-            ),
-        )
+        for attempt in range(EMBED_RETRIES):
+            try:
+                result = client.models.embed_content(
+                    model=EMBED_MODEL,
+                    contents=batch,
+                    config=genai_types.EmbedContentConfig(
+                        output_dimensionality=EMBED_DIMENSIONS,
+                        task_type="RETRIEVAL_DOCUMENT",
+                    ),
+                )
+                break
+            except Exception as error:
+                if attempt == EMBED_RETRIES - 1:
+                    raise
+                delay = 2 ** attempt
+                print(f"Embedding batch {i // BATCH_SIZE + 1} failed; retrying in {delay}s: {error}")
+                time.sleep(delay)
         all_embeddings.extend([e.values for e in result.embeddings])
         print(f"  embedded {min(i + BATCH_SIZE, len(chunks))}/{len(chunks)} chunks")
         time.sleep(0.5)

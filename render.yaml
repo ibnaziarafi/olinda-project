@@ -17,6 +17,8 @@ services:
         sync: false
       - key: GROQ_MODEL
         value: qwen/qwen3.6-27b
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
       - key: EMBED_MODEL
         value: gemini-embedding-001
       - key: EMBED_DIMENSIONS
@@ -25,3 +27,11 @@ services:
         value: "0.65"
       - key: TOP_K
         value: "4"
+      - key: RAG_TOP_K
+        value: "3"
+      - key: MAX_HISTORY_MESSAGES
+        value: "8"
+      - key: MAX_RECENT_MESSAGES
+        value: "4"
+      - key: MAX_SUMMARY_TOKENS
+        value: "400"

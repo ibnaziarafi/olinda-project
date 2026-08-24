@@ -654,6 +654,8 @@
 
   // Session History Management
   const HISTORY_KEY = 'olinda_chat_history';
+  const SUMMARY_KEY = 'olinda_conversation_summary';
+  const MAX_RECENT_MESSAGES = 4;
   const transientReplyPrefix = "I encountered a temporary problem generating an answer.";
   const isTransientReply = reply => typeof reply === "string" && (
     reply.startsWith(transientReplyPrefix) || reply === offlineAnswer
@@ -680,6 +682,10 @@
     }
   }
 
+  function getSummary() {
+    return sessionStorage.getItem(SUMMARY_KEY) || "";
+  }
+
   async function getAnswer(query, history) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -687,7 +693,8 @@
       const payload = {
         session_id: sessionId,
         query: query,
-        messages: history
+        messages: history,
+        conversation_summary: getSummary()
       };
       console.log("[OLINDA] Sending chat payload:", payload);
       const res = await fetch(BACKEND_URL + "/chat", {
@@ -711,7 +718,8 @@
       return {
         reply: data.reply,
         action_links: data.action_links || null,
-        transient: isTransientReply(data.reply)
+        transient: isTransientReply(data.reply),
+        conversation_summary: data.conversation_summary || ""
       };
     } catch (err) {
       console.error("[OLINDA] Backend request/response error:", err);
@@ -756,6 +764,10 @@
       // 5. Save updated history (including assistant's reply and action_links) back to sessionStorage
       if (!res.transient) {
         history.push({ role: "assistant", content: res.reply, action_links: res.action_links });
+      }
+      if (res.conversation_summary) {
+        sessionStorage.setItem(SUMMARY_KEY, res.conversation_summary);
+        history = history.slice(-MAX_RECENT_MESSAGES);
       }
       if (history.length > 10) {
         history = history.slice(-10);
