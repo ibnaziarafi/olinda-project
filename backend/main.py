@@ -106,6 +106,31 @@ def clean_llm_response(text: str) -> str:
     text = re.sub(r"<thinking>.*$", "", text, flags=re.DOTALL | re.IGNORECASE)
     return text.strip()
 
+def build_llm_messages(system_content: str, history: List, safe_message: str):
+    llm_messages = [{"role": "system", "content": system_content}]
+    normalized_history = []
+
+    for msg in history[-MAX_HISTORY_MESSAGES:]:
+        content = redact_pii((msg.content or "").strip())
+        role = msg.role.lower().strip()
+        if not content or role not in {"user", "assistant", "bot"}:
+            continue
+        normalized_history.append({
+            "role": "assistant" if role in {"assistant", "bot"} else "user",
+            "content": content,
+        })
+
+    while (
+        normalized_history
+        and normalized_history[-1]["role"] == "user"
+        and normalized_history[-1]["content"] == safe_message
+    ):
+        normalized_history.pop()
+
+    llm_messages.extend(normalized_history)
+    llm_messages.append({"role": "user", "content": safe_message})
+    return llm_messages
+
 
 # ---------------------------------------------------------------------------
 # Database Setup
@@ -308,6 +333,7 @@ def retrieve_context(message: str, conn):
 def generate_llm_response(messages):
     models = [GROQ_MODEL, "openai/gpt-oss-120b"]
     attempted_models = set()
+    request_chars = sum(len(message.get("content", "")) for message in messages)
 
     for model in models:
         if model in attempted_models:
@@ -320,6 +346,7 @@ def generate_llm_response(messages):
                 model=model,
                 messages=messages,
                 temperature=0.2,
+                max_tokens=700,
             )
             reply = response.choices[0].message.content
             if reply:
@@ -328,7 +355,10 @@ def generate_llm_response(messages):
             print(f"LLM returned an empty response: {model}")
         except Exception as e:
             error_text = str(e)
-            print(f"LLM error ({model}): {error_text}")
+            print(
+                f"LLM error ({model}) | messages: {len(messages)} | "
+                f"request chars: {request_chars}: {error_text}"
+            )
             if "413" in error_text or "request_too_large" in error_text:
                 print("Request too large; context and history limits are already applied.")
             elif "429" in error_text or "rate_limit_exceeded" in error_text:
@@ -524,20 +554,18 @@ def chat(req: ChatRequest):
     # 5. Generate factual answer using Groq LLM with system prompt + RAG context + message history
     context = "\n\n---\n\n".join(chunks)
     system_content = f"{SYSTEM_PROMPT}\n\nContext:\n{context}"
-    llm_messages = [{"role": "system", "content": system_content}]
+    llm_messages = build_llm_messages(system_content, req.messages, safe_message)
 
-    recent_messages = req.messages[-MAX_HISTORY_MESSAGES:] if req.messages else []
-    for msg in recent_messages:
-        role = "assistant" if msg.role in ["assistant", "bot"] else "user"
-        llm_messages.append({"role": role, "content": redact_pii(msg.content)})
-
-    latest_message = recent_messages[-1] if recent_messages else None
-    if (
-        latest_message is None
-        or latest_message.role.lower() != "user"
-        or redact_pii(latest_message.content).strip() != safe_message
-    ):
-        llm_messages.append({"role": "user", "content": safe_message})
+    print("[CHAT] session_id:", req.session_id)
+    print("[CHAT] user query:", safe_message)
+    print("[CHAT] history count:", len(req.messages))
+    print("[CHAT] history:", [
+        {"role": m.role, "content": redact_pii(m.content or "")[:200]}
+        for m in req.messages
+    ])
+    print("[CHAT] LLM message count:", len(llm_messages))
+    print("[CHAT] LLM roles:", [m["role"] for m in llm_messages])
+    print("[CHAT] Context length:", len(context))
 
     llm_start = time.perf_counter()
     reply = generate_llm_response(llm_messages)

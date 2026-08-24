@@ -491,6 +491,7 @@
 
   const welcomeMessage = "👋 Hi! I'm Olinda, Hobart College's virtual assistant.\n\nI can help with:\n• Courses\n• Enrolment\n• TCE\n• ATAR\n• VET\n• Student Services\n\nChoose one of the suggested questions below or type your own.";
   const offlineAnswer = "I'm having trouble reaching my brain right now. Please try again shortly, or contact Hobart College Student Services directly.";
+  let isSending = false;
 
   function escapeHtml(str) {
     return (str || "")
@@ -666,54 +667,71 @@
 
   async function getAnswer(query, history) {
     try {
+      const payload = {
+        session_id: sessionId,
+        query: query,
+        messages: history
+      };
+      console.log("[OLINDA] Sending chat payload:", payload);
       const res = await fetch(BACKEND_URL + "/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: sessionId,
-          query: query,
-          messages: history
-        })
+        body: JSON.stringify(payload)
       });
       if (!res.ok) throw new Error("Backend returned " + res.status);
       const data = await res.json();
+      console.log("[OLINDA] Chat response:", {
+        status: res.status,
+        hasReply: typeof data.reply === "string" && data.reply.length > 0,
+        confidence: data.confidence,
+        escalated: data.escalated,
+        actionLinks: data.action_links || null
+      });
+      if (typeof data.reply !== "string" || !data.reply.trim()) {
+        throw new Error("Backend response did not contain a reply");
+      }
       return { reply: data.reply, action_links: data.action_links || null };
     } catch (err) {
-      console.error("Olinda backend error:", err);
+      console.error("[OLINDA] Backend request/response error:", err);
       return { reply: offlineAnswer, action_links: null };
     }
   }
 
   async function sendMessage(text) {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed || isSending) return;
+    isSending = true;
 
-    addMessage(trimmed, "user");
-    inputEl.value = "";
+    try {
+      addMessage(trimmed, "user");
+      inputEl.value = "";
 
-    // 1. Read existing history from sessionStorage
-    let history = getHistory();
+      // 1. Read existing history from sessionStorage
+      let history = getHistory();
 
-    // 2. Append new user message
-    history.push({ role: "user", content: trimmed });
+      // 2. Append new user message
+      history.push({ role: "user", content: trimmed });
 
-    // 3. Trim window to most recent 10 messages (5 turns)
-    if (history.length > 10) {
-      history = history.slice(-10);
+      // 3. Trim window to most recent 10 messages (5 turns)
+      if (history.length > 10) {
+        history = history.slice(-10);
+      }
+
+      showTyping();
+      // 4. Send full trimmed history array along with latest user query to backend
+      const res = await getAnswer(trimmed, history);
+      hideTyping();
+      addMessage(res.reply, "bot", res.action_links);
+
+      // 5. Save updated history (including assistant's reply and action_links) back to sessionStorage
+      history.push({ role: "assistant", content: res.reply, action_links: res.action_links });
+      if (history.length > 10) {
+        history = history.slice(-10);
+      }
+      saveHistory(history);
+    } finally {
+      isSending = false;
     }
-
-    showTyping();
-    // 4. Send full trimmed history array along with latest user query to backend
-    const res = await getAnswer(trimmed, history);
-    hideTyping();
-    addMessage(res.reply, "bot", res.action_links);
-
-    // 5. Save updated history (including assistant's reply and action_links) back to sessionStorage
-    history.push({ role: "assistant", content: res.reply, action_links: res.action_links });
-    if (history.length > 10) {
-      history = history.slice(-10);
-    }
-    saveHistory(history);
   }
 
   function restoreSessionHistory() {
