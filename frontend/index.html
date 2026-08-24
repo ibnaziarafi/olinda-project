@@ -601,7 +601,7 @@ function parseMarkdown(md) {
   html = html.replace(/__(.*?)__/g, '<strong>$1</strong>');
   html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
   html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-  html = html.replace(/^(?:[\-\•]\s*)(.+)$/gm, '<li>$1</li>');
+  html = html.replace(/^(?:[\-\•\*]\s+)(.+)$/gm, '<li>$1</li>');
   html = html.replace(/((?:<li>.*<\/li>\s*)+)/g, '<ul class="msg-list">$1</ul>');
   html = html.replace(/\n\n/g, '<br><br>');
   html = html.replace(/\n/g, '<br>');
@@ -656,6 +656,10 @@ function showSuggestions() {
 async function sendMessage(text) {
   const trimmed = text.trim();
   if (!trimmed) return;
+
+  // Once the user asks something, the starter suggestion chips have
+  // done their job - clear them so they stop taking up space.
+  suggestionsEl.innerHTML = "";
 
   addMessage(trimmed, "user");
   inputEl.value = "";
