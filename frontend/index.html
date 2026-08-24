@@ -508,13 +508,20 @@ const welcomeMessage = "👋 Hi! I'm Olinda, Hobart College's virtual assistant.
 // Reply used if the backend can't be reached at all (e.g. still on localhost, or down)
 const offlineAnswer = "I'm having trouble reaching my brain right now. Please try again shortly, or contact Hobart College Student Services directly.";
 
+// Reply used if the backend takes too long (e.g. free hosting waking up from sleep)
+const timeoutAnswer = "This is taking longer than usual — I may be waking up after a quiet period. Please try asking again in a moment.";
+const REQUEST_TIMEOUT_MS = 20000;
+
 // Ask the real backend for an answer
 async function getAnswer(text) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const res = await fetch(BACKEND_URL + "/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: sessionId, message: text })
+      body: JSON.stringify({ session_id: sessionId, message: text }),
+      signal: controller.signal
     });
 
     if (!res.ok) throw new Error("Backend returned " + res.status);
@@ -523,7 +530,9 @@ async function getAnswer(text) {
     return data.reply;
   } catch (err) {
     console.error("Olinda backend error:", err);
-    return offlineAnswer;
+    return err && err.name === "AbortError" ? timeoutAnswer : offlineAnswer;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
