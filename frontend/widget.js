@@ -16,14 +16,14 @@
   styleEl.textContent = `
     /* Widget Colors & Variables */
     #olinda-widget-root {
-      /* Official Hobart College brand colours (Pantone 7686C navy / 7409C gold) */
-      --navy: #0D4A83;
+      /* Official Hobart College brand colours (Pantone 7686 C navy / 7409 C gold) */
+      --navy: #1D4F91;
       --blue-700: #14508C;
       --blue-600: #1E6FD9;
       --blue-400: #5C9FEF;
       --blue-100: #E9F2FD;
       --blue-50:  #F5F9FE;
-      --gold: #F0B51B;
+      --gold: #F0B323;
       --gold-soft: #FCE6BB;
       --white: #FFFFFF;
       --ink: #1C2B3A;
