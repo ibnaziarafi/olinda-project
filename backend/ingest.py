@@ -146,10 +146,12 @@ def ensure_sqlite_table(conn: sqlite3.Connection):
     columns = [row[1] for row in cursor.fetchall()]
     if "created_at" not in columns:
         conn.execute("ALTER TABLE course_chunks ADD COLUMN created_at TEXT")
+    if "added_by" not in columns:
+        conn.execute("ALTER TABLE course_chunks ADD COLUMN added_by TEXT")
     conn.commit()
 
 
-def ingest_file(file_path: str, subject_code=None, tasc_level=None, career_field=None, doc_type="course_guide"):
+def ingest_file(file_path: str, subject_code=None, tasc_level=None, career_field=None, doc_type="course_guide", added_by=None):
     print(f"Reading {file_path}...")
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".pdf":
@@ -177,8 +179,8 @@ def ingest_file(file_path: str, subject_code=None, tasc_level=None, career_field
         chunk_id = str(uuid.uuid4())
         conn.execute(
             """INSERT INTO course_chunks
-               (chunk_id, content, embedding, subject_code, tasc_level, career_field, doc_type, source_file, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (chunk_id, content, embedding, subject_code, tasc_level, career_field, doc_type, source_file, created_at, added_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 chunk_id,
                 chunk,
@@ -189,6 +191,7 @@ def ingest_file(file_path: str, subject_code=None, tasc_level=None, career_field
                 doc_type,
                 os.path.basename(file_path),
                 now_str,
+                added_by,
             ),
         )
 
@@ -204,6 +207,7 @@ def ingest_file(file_path: str, subject_code=None, tasc_level=None, career_field
                     "career_field": career_field,
                     "doc_type": doc_type,
                     "source_file": os.path.basename(file_path),
+                    "added_by": added_by,
                 }).execute()
             except Exception as e:
                 print(f"Supabase insert warning: {e}")

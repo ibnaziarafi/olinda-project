@@ -16,8 +16,12 @@ CREATE TABLE IF NOT EXISTS course_chunks (
     career_field TEXT,            -- e.g. 'health', 'trades', 'business'
     doc_type     TEXT,            -- 'course_guide' | 'faq' | 'tasc_standard' | 'excel'
     source_file  TEXT,
-    created_at   TIMESTAMPTZ DEFAULT now()
+    created_at   TIMESTAMPTZ DEFAULT now(),
+    added_by     TEXT             -- display name of the staff member who added this chunk
 );
+
+-- If the table already exists from an earlier version, add the attribution column:
+ALTER TABLE course_chunks ADD COLUMN IF NOT EXISTS added_by TEXT;
 
 -- 3. Sessions & Messages Logging
 CREATE TABLE IF NOT EXISTS sessions (
@@ -42,7 +46,23 @@ CREATE TABLE IF NOT EXISTS unanswered_log (
     confidence_score  REAL DEFAULT 0.0,
     occurred_at       TIMESTAMPTZ DEFAULT now(),
     reviewed          BOOLEAN DEFAULT FALSE,
-    resolution_chunk_id UUID REFERENCES course_chunks(chunk_id) ON DELETE SET NULL
+    resolution_chunk_id UUID REFERENCES course_chunks(chunk_id) ON DELETE SET NULL,
+    resolved_by       TEXT           -- display name of the staff member who answered it
+);
+
+-- If the table already exists from an earlier version, add the attribution column:
+ALTER TABLE unanswered_log ADD COLUMN IF NOT EXISTS resolved_by TEXT;
+
+-- 4b. Staff accounts added via the dashboard "Manage Staff" page.
+-- Passwords are stored salted + PBKDF2-hashed, never in plaintext.
+-- Built-in accounts still come from the STAFF_USERS env var and are not stored here.
+CREATE TABLE IF NOT EXISTS staff_users (
+    username   TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    salt       TEXT NOT NULL,
+    pw_hash    TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    created_by TEXT
 );
 
 -- 5. Vector Similarity Search Function (RPC)

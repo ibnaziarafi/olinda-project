@@ -14,13 +14,16 @@ import sqlite3
 import uuid
 import shutil
 import time
+import base64
+import hmac
+import hashlib
 from pathlib import Path
 from datetime import datetime, timezone
 
 import numpy as np
 from typing import List, Optional
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -50,6 +53,42 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 STUDENT_SERVICES_CONTACT = "hobart.college@decyp.tas.gov.au or (03) 6220 3133"
+
+# ---------------------------------------------------------------------------
+# Staff authentication config
+# ---------------------------------------------------------------------------
+# Secret used to sign session tokens. MUST be overridden in production via env.
+AUTH_SECRET = os.getenv("AUTH_SECRET", "dev-insecure-secret-change-me")
+# How long a staff login stays valid (seconds). Default 12 hours.
+TOKEN_TTL_SECONDS = int(os.getenv("TOKEN_TTL_SECONDS", "43200"))
+
+
+def _parse_staff_users(raw: str) -> dict:
+    """Parse STAFF_USERS env: 'username:password:Display Name' comma-separated.
+
+    Passwords live only in the server environment, never in the repo or the
+    frontend. Set real staff accounts by overriding STAFF_USERS in Render.
+    """
+    users = {}
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        bits = part.split(":")
+        if len(bits) >= 3:
+            uname = bits[0].strip().lower()
+            password = bits[1]
+            name = ":".join(bits[2:]).strip()
+            if uname and password and name:
+                users[uname] = {"password": password, "name": name}
+    return users
+
+
+# Default is a single demo account so the dashboard is usable out of the box.
+# Replace via env, e.g. STAFF_USERS="pial:s3cret:Pial Hossain,ben:pw2:Ben Dolliver"
+STAFF_USERS = _parse_staff_users(
+    os.getenv("STAFF_USERS", "admin:olinda2027:Hobart College Staff")
+)
 
 SYSTEM_PROMPT = f"""You are Olinda, Hobart College's course advisory assistant.
 You help Year 11/12 students, prospective Year 10 students, and parents with
@@ -182,6 +221,68 @@ information not present in the conversation. Maximum {MAX_SUMMARY_WORDS} words.
 
 
 # ---------------------------------------------------------------------------
+# Staff session tokens (HMAC-signed, no external JWT dependency)
+# ---------------------------------------------------------------------------
+
+def make_token(username: str, name: str) -> str:
+    """Create a signed, expiring session token carrying the staff identity."""
+    exp = int(time.time()) + TOKEN_TTL_SECONDS
+    payload = f"{username}|{name}|{exp}"
+    body = base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii")
+    sig = hmac.new(AUTH_SECRET.encode(), body.encode(), hashlib.sha256).hexdigest()
+    return f"{body}.{sig}"
+
+
+def verify_token(token: str):
+    """Return {'username','name'} if the token is valid and unexpired, else None."""
+    try:
+        body, sig = token.split(".", 1)
+        expected = hmac.new(AUTH_SECRET.encode(), body.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            return None
+        payload = base64.urlsafe_b64decode(body.encode("ascii")).decode("utf-8")
+        username, name, exp = payload.split("|", 2)
+        if int(exp) < int(time.time()):
+            return None
+        return {"username": username, "name": name}
+    except Exception:
+        return None
+
+
+def get_current_staff(authorization: str = Header(None)):
+    """FastAPI dependency: require a valid staff session token on a request."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    staff = verify_token(authorization.split(" ", 1)[1].strip())
+    if not staff:
+        raise HTTPException(status_code=401, detail="Session expired or invalid. Please log in again.")
+    return staff
+
+
+# ---------------------------------------------------------------------------
+# Password hashing (PBKDF2-HMAC-SHA256, salted; passwords are never stored raw)
+# ---------------------------------------------------------------------------
+PBKDF2_ITERATIONS = 100_000
+
+
+def hash_password(password: str, salt: str = None):
+    if salt is None:
+        salt = os.urandom(16).hex()
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), bytes.fromhex(salt), PBKDF2_ITERATIONS
+    ).hex()
+    return salt, digest
+
+
+def verify_password(password: str, salt: str, expected_hash: str) -> bool:
+    try:
+        _, check = hash_password(password, salt)
+        return hmac.compare_digest(check, expected_hash)
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
 # Database Setup
 # ---------------------------------------------------------------------------
 
@@ -240,6 +341,15 @@ def init_db():
             reviewed          INTEGER DEFAULT 0,
             resolution_chunk_id TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS staff_users (
+            username   TEXT PRIMARY KEY,
+            name       TEXT NOT NULL,
+            salt       TEXT NOT NULL,
+            pw_hash    TEXT NOT NULL,
+            created_at TEXT,
+            created_by TEXT
+        );
         """
     )
     cursor = conn.execute("PRAGMA table_info(course_chunks)")
@@ -251,9 +361,72 @@ def init_db():
     columns = [row[1] for row in cursor.fetchall()]
     if "resolution_chunk_id" not in columns:
         conn.execute("ALTER TABLE unanswered_log ADD COLUMN resolution_chunk_id TEXT")
+    if "resolved_by" not in columns:
+        conn.execute("ALTER TABLE unanswered_log ADD COLUMN resolved_by TEXT")
+
+    # Attribution: which staff member added a knowledge chunk
+    cursor = conn.execute("PRAGMA table_info(course_chunks)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if "added_by" not in columns:
+        conn.execute("ALTER TABLE course_chunks ADD COLUMN added_by TEXT")
 
     conn.commit()
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Staff user store (UI-added accounts). Persisted in Supabase when configured
+# (SQLite is wiped on Render free-tier restarts); SQLite is the local fallback.
+# ---------------------------------------------------------------------------
+
+def load_db_users() -> dict:
+    """Return {username: {name, salt, pw_hash}} for accounts added via the UI."""
+    if supabase_client:
+        try:
+            res = supabase_client.table("staff_users").select("*").execute()
+            return {r["username"]: r for r in (res.data or [])}
+        except Exception as e:
+            print(f"Supabase staff_users load warning: {e}")
+    conn = get_db()
+    rows = conn.execute("SELECT username, name, salt, pw_hash FROM staff_users").fetchall()
+    conn.close()
+    return {r["username"]: dict(r) for r in rows}
+
+
+def add_db_user(username: str, name: str, password: str, created_by: str):
+    salt, pw_hash = hash_password(password)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO staff_users (username, name, salt, pw_hash, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?)",
+        (username, name, salt, pw_hash, now_iso, created_by),
+    )
+    conn.commit()
+    conn.close()
+    if supabase_client:
+        try:
+            supabase_client.table("staff_users").insert({
+                "username": username,
+                "name": name,
+                "salt": salt,
+                "pw_hash": pw_hash,
+                "created_at": now_iso,
+                "created_by": created_by,
+            }).execute()
+        except Exception as e:
+            print(f"Supabase staff_users insert warning: {e}")
+
+
+def remove_db_user(username: str):
+    conn = get_db()
+    conn.execute("DELETE FROM staff_users WHERE username = ?", (username,))
+    conn.commit()
+    conn.close()
+    if supabase_client:
+        try:
+            supabase_client.table("staff_users").delete().eq("username", username).execute()
+        except Exception as e:
+            print(f"Supabase staff_users delete warning: {e}")
 
 
 def log_unanswered(question: str, score: float, conn):
@@ -531,6 +704,17 @@ def extract_action_links(chunks: list[str]) -> Optional[list[ActionLink]]:
     return links if links else None
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class NewStaffRequest(BaseModel):
+    username: str
+    name: str
+    password: str
+
+
 class ResolveUnansweredRequest(BaseModel):
     id: str
     answer: str
@@ -548,6 +732,75 @@ class IngestTextRequest(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok", "db": "supabase" if supabase_client else "sqlite"}
+
+
+@app.post("/api/login")
+def login(req: LoginRequest):
+    """Authenticate a staff member and return a signed session token.
+
+    Checks built-in accounts (STAFF_USERS env) first, then UI-added accounts
+    stored in the staff_users table.
+    """
+    username = (req.username or "").strip().lower()
+    password = req.password or ""
+
+    # 1. Built-in env accounts (plaintext comparison, constant-time)
+    user = STAFF_USERS.get(username)
+    if user and hmac.compare_digest(str(user["password"]), str(password)):
+        return {"token": make_token(username, user["name"]), "name": user["name"], "username": username}
+
+    # 2. UI-added accounts (salted PBKDF2 hash)
+    db_user = load_db_users().get(username)
+    if db_user and verify_password(password, db_user["salt"], db_user["pw_hash"]):
+        return {"token": make_token(username, db_user["name"]), "name": db_user["name"], "username": username}
+
+    raise HTTPException(status_code=401, detail="Invalid username or password")
+
+
+# ---------------------------------------------------------------------------
+# Staff management (any logged-in staff member can add/remove UI accounts)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/staff")
+def list_staff(staff: dict = Depends(get_current_staff)):
+    out = []
+    for uname, info in STAFF_USERS.items():
+        out.append({"username": uname, "name": info["name"], "builtin": True, "removable": False})
+    for uname, info in load_db_users().items():
+        out.append({"username": uname, "name": info["name"], "builtin": False, "removable": True})
+    return out
+
+
+@app.post("/api/staff")
+def create_staff(req: NewStaffRequest, staff: dict = Depends(get_current_staff)):
+    uname = (req.username or "").strip().lower()
+    name = (req.name or "").strip()
+    password = req.password or ""
+
+    if not uname or not uname.isalnum():
+        raise HTTPException(status_code=400, detail="Username must contain only letters and numbers.")
+    if not name:
+        raise HTTPException(status_code=400, detail="Display name is required.")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+    if uname in STAFF_USERS or uname in load_db_users():
+        raise HTTPException(status_code=409, detail="That username already exists.")
+
+    add_db_user(uname, name, password, staff["name"])
+    return {"status": "success", "username": uname, "name": name, "added_by": staff["name"]}
+
+
+@app.delete("/api/staff/{username}")
+def delete_staff(username: str, staff: dict = Depends(get_current_staff)):
+    uname = (username or "").strip().lower()
+    if uname in STAFF_USERS:
+        raise HTTPException(status_code=400, detail="Built-in accounts can't be removed from here.")
+    if uname == staff.get("username"):
+        raise HTTPException(status_code=400, detail="You can't remove your own account while logged in.")
+    if uname not in load_db_users():
+        raise HTTPException(status_code=404, detail="User not found.")
+    remove_db_user(uname)
+    return {"status": "deleted", "username": uname}
 
 
 @app.get("/")
@@ -678,7 +931,7 @@ def chat(req: ChatRequest):
 # ---------------------------------------------------------------------------
 
 @app.get("/api/analytics")
-def get_analytics():
+def get_analytics(staff: dict = Depends(get_current_staff)):
     conn = get_db()
     total_messages = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
     unanswered_count = conn.execute("SELECT COUNT(*) FROM unanswered_log WHERE reviewed = 0").fetchone()[0]
@@ -695,17 +948,17 @@ def get_analytics():
 
 
 @app.get("/api/unanswered")
-def get_unanswered():
+def get_unanswered(staff: dict = Depends(get_current_staff)):
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, question, confidence_score, occurred_at, reviewed FROM unanswered_log ORDER BY occurred_at DESC"
+        "SELECT id, question, confidence_score, occurred_at, reviewed, resolved_by FROM unanswered_log ORDER BY occurred_at DESC"
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
 @app.post("/api/unanswered/resolve")
-def resolve_unanswered(req: ResolveUnansweredRequest):
+def resolve_unanswered(req: ResolveUnansweredRequest, staff: dict = Depends(get_current_staff)):
     conn = get_db()
     row = conn.execute("SELECT question FROM unanswered_log WHERE id = ?", (req.id,)).fetchone()
     if not row:
@@ -714,20 +967,21 @@ def resolve_unanswered(req: ResolveUnansweredRequest):
 
     question = row["question"]
     combined_knowledge = f"Question: {question}\nOfficial Answer: {req.answer}"
+    staff_name = staff["name"]
 
-    # Embed and save as new knowledge chunk
+    # Embed and save as new knowledge chunk, attributed to the staff member
     embeddings = embed_chunks([combined_knowledge])
     chunk_id = str(uuid.uuid4())
     now_iso = datetime.now(timezone.utc).isoformat()
 
     conn.execute(
-        """INSERT INTO course_chunks (chunk_id, content, embedding, doc_type, source_file, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (chunk_id, combined_knowledge, json.dumps(embeddings[0]), "staff_faq", "staff_dashboard", now_iso),
+        """INSERT INTO course_chunks (chunk_id, content, embedding, doc_type, source_file, created_at, added_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (chunk_id, combined_knowledge, json.dumps(embeddings[0]), "staff_faq", "staff_dashboard", now_iso, staff_name),
     )
     conn.execute(
-        "UPDATE unanswered_log SET reviewed = 1, resolution_chunk_id = ? WHERE id = ?",
-        (chunk_id, req.id),
+        "UPDATE unanswered_log SET reviewed = 1, resolution_chunk_id = ?, resolved_by = ? WHERE id = ?",
+        (chunk_id, staff_name, req.id),
     )
     conn.commit()
     conn.close()
@@ -740,22 +994,24 @@ def resolve_unanswered(req: ResolveUnansweredRequest):
                 "embedding": embeddings[0],
                 "doc_type": "staff_faq",
                 "source_file": "staff_dashboard",
+                "added_by": staff_name,
             }).execute()
             supabase_client.table("unanswered_log").update({
                 "reviewed": True,
-                "resolution_chunk_id": chunk_id
+                "resolution_chunk_id": chunk_id,
+                "resolved_by": staff_name,
             }).eq("id", req.id).execute()
         except Exception as e:
             print(f"Supabase resolve update warning: {e}")
 
-    return {"status": "success", "chunk_id": chunk_id}
+    return {"status": "success", "chunk_id": chunk_id, "resolved_by": staff_name}
 
 
 @app.get("/api/chunks")
-def get_chunks(limit: int = Query(50, le=200)):
+def get_chunks(limit: int = Query(50, le=200), staff: dict = Depends(get_current_staff)):
     conn = get_db()
     rows = conn.execute(
-        "SELECT chunk_id, content, doc_type, source_file, created_at FROM course_chunks ORDER BY rowid DESC LIMIT ?",
+        "SELECT chunk_id, content, doc_type, source_file, created_at, added_by FROM course_chunks ORDER BY rowid DESC LIMIT ?",
         (limit,)
     ).fetchall()
     conn.close()
@@ -763,7 +1019,7 @@ def get_chunks(limit: int = Query(50, le=200)):
 
 
 @app.delete("/api/chunks/{chunk_id}")
-def delete_chunk(chunk_id: str):
+def delete_chunk(chunk_id: str, staff: dict = Depends(get_current_staff)):
     conn = get_db()
     conn.execute("DELETE FROM course_chunks WHERE chunk_id = ?", (chunk_id,))
     conn.commit()
@@ -779,10 +1035,11 @@ def delete_chunk(chunk_id: str):
 
 
 @app.post("/api/ingest-text")
-def ingest_text_api(req: IngestTextRequest):
+def ingest_text_api(req: IngestTextRequest, staff: dict = Depends(get_current_staff)):
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Text content cannot be empty")
 
+    staff_name = staff["name"]
     chunks = chunk_text(req.text)
     embeddings = embed_chunks(chunks)
     conn = get_db()
@@ -792,9 +1049,9 @@ def ingest_text_api(req: IngestTextRequest):
     for chunk, embedding in zip(chunks, embeddings):
         chunk_id = str(uuid.uuid4())
         conn.execute(
-            """INSERT INTO course_chunks (chunk_id, content, embedding, doc_type, source_file, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (chunk_id, chunk, json.dumps(embedding), req.doc_type, "dashboard_text_input", now_iso),
+            """INSERT INTO course_chunks (chunk_id, content, embedding, doc_type, source_file, created_at, added_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (chunk_id, chunk, json.dumps(embedding), req.doc_type, "dashboard_text_input", now_iso, staff_name),
         )
         added_ids.append(chunk_id)
 
@@ -806,17 +1063,22 @@ def ingest_text_api(req: IngestTextRequest):
                     "embedding": embedding,
                     "doc_type": req.doc_type,
                     "source_file": "dashboard_text_input",
+                    "added_by": staff_name,
                 }).execute()
             except Exception as e:
                 print(f"Supabase insert warning: {e}")
 
     conn.commit()
     conn.close()
-    return {"status": "success", "chunks_added": len(added_ids)}
+    return {"status": "success", "chunks_added": len(added_ids), "added_by": staff_name}
 
 
 @app.post("/api/upload-file")
-async def upload_file_api(file: UploadFile = File(...), doc_type: str = Form("course_guide")):
+async def upload_file_api(
+    file: UploadFile = File(...),
+    doc_type: str = Form("course_guide"),
+    staff: dict = Depends(get_current_staff),
+):
     temp_dir = Path("temp_uploads")
     temp_dir.mkdir(exist_ok=True)
     file_path = temp_dir / file.filename
@@ -825,8 +1087,13 @@ async def upload_file_api(file: UploadFile = File(...), doc_type: str = Form("co
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        chunks_added = ingest_file(str(file_path), doc_type=doc_type)
-        return {"status": "success", "filename": file.filename, "chunks_added": chunks_added}
+        chunks_added = ingest_file(str(file_path), doc_type=doc_type, added_by=staff["name"])
+        return {
+            "status": "success",
+            "filename": file.filename,
+            "chunks_added": chunks_added,
+            "added_by": staff["name"],
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
     finally:
