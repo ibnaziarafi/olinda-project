@@ -302,6 +302,14 @@ def get_db():
     return conn
 
 
+def supabase_count(table_name: str) -> int:
+    """Return an exact persistent row count without downloading the table."""
+    if not supabase_client:
+        raise RuntimeError("Supabase is not configured")
+    result = supabase_client.table(table_name).select("*", count="exact").limit(1).execute()
+    return int(result.count or 0)
+
+
 def init_db():
     conn = get_db()
     conn.executescript(
@@ -723,6 +731,7 @@ class ResolveUnansweredRequest(BaseModel):
 class IngestTextRequest(BaseModel):
     text: str
     doc_type: str = "faq"
+    source_file: str = "dashboard_text_input"
 
 
 # ---------------------------------------------------------------------------
@@ -932,6 +941,33 @@ def chat(req: ChatRequest):
 
 @app.get("/api/analytics")
 def get_analytics(staff: dict = Depends(get_current_staff)):
+    if supabase_client:
+        try:
+            return {
+                "total_messages": supabase_count("messages"),
+                "unanswered_count": int(
+                    supabase_client.table("unanswered_log")
+                    .select("*", count="exact")
+                    .eq("reviewed", False)
+                    .limit(1)
+                    .execute()
+                    .count
+                    or 0
+                ),
+                "escalated_count": int(
+                    supabase_client.table("messages")
+                    .select("*", count="exact")
+                    .eq("escalated", True)
+                    .limit(1)
+                    .execute()
+                    .count
+                    or 0
+                ),
+                "knowledge_chunks": supabase_count("course_chunks"),
+            }
+        except Exception as e:
+            print(f"Supabase analytics fallback to SQLite: {e}")
+
     conn = get_db()
     total_messages = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
     unanswered_count = conn.execute("SELECT COUNT(*) FROM unanswered_log WHERE reviewed = 0").fetchone()[0]
@@ -1009,6 +1045,19 @@ def resolve_unanswered(req: ResolveUnansweredRequest, staff: dict = Depends(get_
 
 @app.get("/api/chunks")
 def get_chunks(limit: int = Query(50, le=200), staff: dict = Depends(get_current_staff)):
+    if supabase_client:
+        try:
+            result = (
+                supabase_client.table("course_chunks")
+                .select("chunk_id,content,doc_type,source_file,created_at,added_by")
+                .order("created_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+            return result.data or []
+        except Exception as e:
+            print(f"Supabase chunks fallback to SQLite: {e}")
+
     conn = get_db()
     rows = conn.execute(
         "SELECT chunk_id, content, doc_type, source_file, created_at, added_by FROM course_chunks ORDER BY rowid DESC LIMIT ?",
@@ -1029,7 +1078,7 @@ def delete_chunk(chunk_id: str, staff: dict = Depends(get_current_staff)):
         try:
             supabase_client.table("course_chunks").delete().eq("chunk_id", chunk_id).execute()
         except Exception as e:
-            print(f"Supabase delete chunk warning: {e}")
+            raise HTTPException(status_code=502, detail=f"Persistent database delete failed: {e}")
 
     return {"status": "deleted"}
 
@@ -1047,26 +1096,47 @@ def ingest_text_api(req: IngestTextRequest, staff: dict = Depends(get_current_st
     added_ids = []
 
     for chunk, embedding in zip(chunks, embeddings):
-        chunk_id = str(uuid.uuid4())
+        source_file = (req.source_file or "dashboard_text_input").strip()
+
+        # Exact-content deduplication makes retries safe, including after a
+        # timeout where the client did not receive the original success reply.
+        if supabase_client:
+            try:
+                existing = (
+                    supabase_client.table("course_chunks")
+                    .select("chunk_id")
+                    .eq("content", chunk)
+                    .limit(1)
+                    .execute()
+                )
+                if existing.data:
+                    continue
+            except Exception as e:
+                raise HTTPException(status_code=502, detail=f"Persistent database lookup failed: {e}")
+
+        chunk_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"olinda:{req.doc_type}:{source_file}:{chunk}"))
         conn.execute(
-            """INSERT INTO course_chunks (chunk_id, content, embedding, doc_type, source_file, created_at, added_by)
+            """INSERT OR IGNORE INTO course_chunks (chunk_id, content, embedding, doc_type, source_file, created_at, added_by)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (chunk_id, chunk, json.dumps(embedding), req.doc_type, "dashboard_text_input", now_iso, staff_name),
+            (chunk_id, chunk, json.dumps(embedding), req.doc_type, source_file, now_iso, staff_name),
         )
-        added_ids.append(chunk_id)
 
         if supabase_client:
             try:
-                supabase_client.table("course_chunks").insert({
+                supabase_client.table("course_chunks").upsert({
                     "chunk_id": chunk_id,
                     "content": chunk,
                     "embedding": embedding,
                     "doc_type": req.doc_type,
-                    "source_file": "dashboard_text_input",
+                    "source_file": source_file,
                     "added_by": staff_name,
                 }).execute()
             except Exception as e:
-                print(f"Supabase insert warning: {e}")
+                conn.rollback()
+                conn.close()
+                raise HTTPException(status_code=502, detail=f"Persistent database insert failed: {e}")
+
+        added_ids.append(chunk_id)
 
     conn.commit()
     conn.close()
