@@ -195,22 +195,36 @@ def ingest_file(file_path: str, subject_code=None, tasc_level=None, career_field
             ),
         )
 
-        # 2. Save to Supabase pgvector if configured
+        # 2. Save to Supabase pgvector if configured. Drop optional columns the
+        #    table hasn't been migrated for yet, so the chunk still persists.
         if supabase_client:
-            try:
-                supabase_client.table("course_chunks").insert({
-                    "chunk_id": chunk_id,
-                    "content": chunk,
-                    "embedding": embedding,
-                    "subject_code": subject_code,
-                    "tasc_level": tasc_level,
-                    "career_field": career_field,
-                    "doc_type": doc_type,
-                    "source_file": os.path.basename(file_path),
-                    "added_by": added_by,
-                }).execute()
-            except Exception as e:
-                print(f"Supabase insert warning: {e}")
+            row = {
+                "chunk_id": chunk_id,
+                "content": chunk,
+                "embedding": embedding,
+                "subject_code": subject_code,
+                "tasc_level": tasc_level,
+                "career_field": career_field,
+                "doc_type": doc_type,
+                "source_file": os.path.basename(file_path),
+                "added_by": added_by,
+            }
+            for _ in range(3):
+                try:
+                    supabase_client.table("course_chunks").insert(row).execute()
+                    break
+                except Exception as e:
+                    msg = str(e)
+                    dropped = False
+                    for col in ("added_by", "subject_code", "tasc_level", "career_field"):
+                        if col in row and f"'{col}'" in msg:
+                            del row[col]
+                            dropped = True
+                            print(f"Supabase course_chunks missing '{col}'; inserting without it.")
+                            break
+                    if not dropped:
+                        print(f"Supabase insert warning: {e}")
+                        break
 
     conn.commit()
     conn.close()

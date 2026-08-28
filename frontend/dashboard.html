@@ -355,6 +355,7 @@
     <span class="user-chip">
       <span class="user-avatar" id="user-avatar">?</span>
       <span class="user-name" id="user-name">—</span>
+      <span id="role-badge" style="font-size:0.68rem; background:var(--gold); color:var(--navy); padding:1px 7px; border-radius:999px; font-weight:700;">Staff</span>
     </span>
     <a href="/" style="color: var(--blue-100); text-decoration:none; font-size:0.88rem; font-weight:500;">← Website</a>
     <button class="logout-btn" onclick="logout()">Log out</button>
@@ -365,7 +366,8 @@
   <button class="tab-btn active" onclick="switchTab('analytics')">📊 Analytics Overview</button>
   <button class="tab-btn" onclick="switchTab('unanswered')">❓ Unanswered Queue <span class="tab-badge" id="badge-unanswered">0</span></button>
   <button class="tab-btn" onclick="switchTab('knowledge')">📚 Knowledge Base Manager</button>
-  <button class="tab-btn" onclick="switchTab('staff')">👥 Manage Staff</button>
+  <button class="tab-btn" id="tab-btn-staff" onclick="switchTab('staff')" style="display:none;">👥 Manage Staff</button>
+  <button class="tab-btn" onclick="switchTab('account')">🔑 My Account</button>
 </div>
 
 <main>
@@ -502,15 +504,26 @@
             <input type="text" id="new-username" placeholder="letters &amp; numbers only, e.g. sanisha" required>
           </div>
         </div>
-        <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:6px;">Temporary Password (min 6 characters)</label>
-        <input type="text" id="new-password" placeholder="They can be told to change it later" required>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+          <div>
+            <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:6px;">Temporary Password (min 6 characters)</label>
+            <input type="text" id="new-password" placeholder="They can change it later" required>
+          </div>
+          <div>
+            <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:6px;">Role</label>
+            <select id="new-role">
+              <option value="user" selected>Normal user (can only change own password)</option>
+              <option value="admin">Admin (can manage staff)</option>
+            </select>
+          </div>
+        </div>
         <button type="submit" class="btn btn-primary" id="add-staff-btn">Create Staff Login</button>
       </form>
     </div>
 
     <div class="section-card">
       <div class="section-title">Staff Accounts</div>
-      <div class="section-desc">Everyone who can sign in to this dashboard. Built-in accounts are configured on the server and can't be removed here.</div>
+      <div class="section-desc">Everyone who can sign in to this dashboard. Built-in accounts are configured on the server and can't be removed here. Passwords are never shown to anyone, including admins.</div>
 
       <div class="table-responsive">
         <table>
@@ -518,15 +531,44 @@
             <tr>
               <th>Display Name</th>
               <th>Username</th>
+              <th>Role</th>
               <th>Type</th>
               <th>Action</th>
             </tr>
           </thead>
           <tbody id="staff-table-body">
-            <tr><td colspan="4" style="text-align:center; color: var(--ink-soft);">Loading staff...</td></tr>
+            <tr><td colspan="5" style="text-align:center; color: var(--ink-soft);">Loading staff...</td></tr>
           </tbody>
         </table>
       </div>
+    </div>
+  </div>
+
+  <!-- TAB 5: MY ACCOUNT (all staff) -->
+  <div class="tab-content" id="tab-account">
+    <div class="section-card">
+      <div class="section-title">My Account</div>
+      <div class="section-desc">Your profile. Passwords are stored securely and can never be viewed by anyone.</div>
+      <table style="max-width:460px;">
+        <tr><th style="width:140px;">Display Name</th><td id="me-name">—</td></tr>
+        <tr><th>Username</th><td id="me-username" style="font-family:var(--font-mono);">—</td></tr>
+        <tr><th>Role</th><td id="me-role">—</td></tr>
+      </table>
+    </div>
+
+    <div class="section-card">
+      <div class="section-title">Change My Password</div>
+      <div class="section-desc">You can only change your own password, and you must enter your current one first.</div>
+      <div id="account-builtin-note" style="display:none; background:#FEF3C7; color:#92400E; padding:12px 14px; border-radius:8px; font-size:0.86rem;">
+        This is a built-in account configured on the server. Its password is set through the <code>STAFF_USERS</code> environment variable, not here.
+      </div>
+      <form id="change-pw-form" onsubmit="changePassword(event)">
+        <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:6px;">Current Password</label>
+        <input type="password" id="cur-password" autocomplete="current-password" required>
+        <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:6px;">New Password (min 6 characters)</label>
+        <input type="password" id="new-my-password" autocomplete="new-password" required>
+        <button type="submit" class="btn btn-primary" id="change-pw-btn">Update Password</button>
+      </form>
     </div>
   </div>
 </main>
@@ -542,9 +584,12 @@
   // ---- Auth state -------------------------------------------------------
   const TOKEN_KEY = 'olinda_staff_token';
   const NAME_KEY  = 'olinda_staff_name';
+  const ROLE_KEY  = 'olinda_staff_role';
 
   function getToken() { return sessionStorage.getItem(TOKEN_KEY); }
   function getStaffName() { return sessionStorage.getItem(NAME_KEY) || ''; }
+  function getRole() { return sessionStorage.getItem(ROLE_KEY) || 'user'; }
+  function isAdmin() { return getRole() === 'admin'; }
 
   function authHeaders(extra) {
     const h = extra || {};
@@ -592,6 +637,7 @@
       const data = await res.json();
       sessionStorage.setItem(TOKEN_KEY, data.token);
       sessionStorage.setItem(NAME_KEY, data.name);
+      sessionStorage.setItem(ROLE_KEY, data.role || 'user');
       enterDashboard();
     } catch (err) {
       showLoginError('Could not reach the server. Please try again.');
@@ -603,6 +649,7 @@
   function logout(message) {
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(NAME_KEY);
+    sessionStorage.removeItem(ROLE_KEY);
     document.getElementById('login-overlay').classList.remove('hidden');
     document.getElementById('login-password').value = '';
     if (message) showLoginError(message);
@@ -612,6 +659,9 @@
     const name = getStaffName();
     document.getElementById('user-name').textContent = name || 'Staff';
     document.getElementById('user-avatar').textContent = (name || '?').trim().charAt(0).toUpperCase();
+    // Show the admin-only role badge and the Manage Staff tab only for admins.
+    document.getElementById('role-badge').textContent = isAdmin() ? 'Admin' : 'Staff';
+    document.getElementById('tab-btn-staff').style.display = isAdmin() ? '' : 'none';
     document.getElementById('login-overlay').classList.add('hidden');
     loadAnalytics();
   }
@@ -627,24 +677,30 @@
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 
-    event.target.classList.add('active');
+    // Mark the matching tab button active by its onclick target (robust — no
+    // reliance on the global event object).
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      if ((btn.getAttribute('onclick') || '').includes(`'${tabId}'`)) btn.classList.add('active');
+    });
     document.getElementById(`tab-${tabId}`).classList.add('active');
 
     if (tabId === 'analytics') loadAnalytics();
     if (tabId === 'unanswered') loadUnanswered();
     if (tabId === 'knowledge') loadChunks();
     if (tabId === 'staff') loadStaff();
+    if (tabId === 'account') loadMe();
   }
 
   // ---- Manage Staff ----------------------------------------------------
   async function loadStaff() {
     try {
       const res = await authFetch(`${API_BASE}/api/staff`);
-      const data = await res.json();
+      let data = await res.json();
+      if (!Array.isArray(data)) data = data ? [data] : [];
       const tbody = document.getElementById('staff-table-body');
       tbody.innerHTML = '';
       if (!data.length) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--ink-soft);">No staff accounts found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--ink-soft);">No staff accounts found.</td></tr>';
         return;
       }
       const me = getStaffName();
@@ -653,6 +709,9 @@
         const typeTag = u.builtin
           ? '<span class="tag tag-info">Built-in</span>'
           : '<span class="tag tag-success">Added via dashboard</span>';
+        const roleTag = u.role === 'admin'
+          ? '<span class="tag tag-warning">Admin</span>'
+          : '<span class="tag tag-info">User</span>';
         let action;
         if (u.removable) {
           action = `<button class="btn btn-danger" style="padding:4px 10px; font-size:0.78rem;" onclick="removeStaff('${escapeHtml(u.username)}', '${escapeHtml(u.name)}')">Remove</button>`;
@@ -662,6 +721,7 @@
         tr.innerHTML = `
           <td style="font-weight:600;">${escapeHtml(u.name)}${u.name === me ? ' <span class="tag tag-info" style="font-size:0.68rem;">you</span>' : ''}</td>
           <td style="font-family: var(--font-mono); font-size:0.85rem;">${escapeHtml(u.username)}</td>
+          <td>${roleTag}</td>
           <td>${typeTag}</td>
           <td>${action}</td>
         `;
@@ -678,19 +738,21 @@
     const name = document.getElementById('new-name').value.trim();
     const username = document.getElementById('new-username').value.trim();
     const password = document.getElementById('new-password').value;
+    const role = document.getElementById('new-role').value;
     btn.disabled = true; btn.textContent = 'Creating...';
     try {
       const res = await authFetch(`${API_BASE}/api/staff`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, name, password })
+        body: JSON.stringify({ username, name, password, role })
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        showToast(`Staff login created for ${data.name}`);
+        showToast(`${data.role === 'admin' ? 'Admin' : 'Staff'} login created for ${data.name}`);
         document.getElementById('new-name').value = '';
         document.getElementById('new-username').value = '';
         document.getElementById('new-password').value = '';
+        document.getElementById('new-role').value = 'user';
         loadStaff();
       } else {
         alert(data.detail || 'Could not create staff login.');
@@ -718,6 +780,51 @@
     }
   }
 
+  // ---- My Account ------------------------------------------------------
+  async function loadMe() {
+    try {
+      const res = await authFetch(`${API_BASE}/api/me`);
+      const me = await res.json();
+      document.getElementById('me-name').textContent = me.name;
+      document.getElementById('me-username').textContent = me.username;
+      document.getElementById('me-role').innerHTML = me.role === 'admin'
+        ? '<span class="tag tag-warning">Admin</span>' : '<span class="tag tag-info">Normal user</span>';
+    } catch (e) {
+      console.error('loadMe error:', e);
+    }
+  }
+
+  async function changePassword(e) {
+    e.preventDefault();
+    const btn = document.getElementById('change-pw-btn');
+    const current_password = document.getElementById('cur-password').value;
+    const new_password = document.getElementById('new-my-password').value;
+    btn.disabled = true; btn.textContent = 'Updating...';
+    try {
+      const res = await authFetch(`${API_BASE}/api/me/password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_password, new_password })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showToast('Password updated.');
+        document.getElementById('cur-password').value = '';
+        document.getElementById('new-my-password').value = '';
+      } else {
+        // Show the built-in-account hint inline if that's the reason.
+        if ((data.detail || '').toLowerCase().includes('built-in')) {
+          document.getElementById('account-builtin-note').style.display = 'block';
+        }
+        alert(data.detail || 'Could not update password.');
+      }
+    } catch (err) {
+      console.error('changePassword error:', err);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Update Password';
+    }
+  }
+
   async function loadAnalytics() {
     try {
       const res = await authFetch(`${API_BASE}/api/analytics`);
@@ -735,7 +842,8 @@
   async function loadUnanswered() {
     try {
       const res = await authFetch(`${API_BASE}/api/unanswered`);
-      const data = await res.json();
+      let data = await res.json();
+      if (!Array.isArray(data)) data = data ? [data] : [];
       const tbody = document.getElementById('unanswered-table-body');
       tbody.innerHTML = '';
 
@@ -805,7 +913,8 @@
   async function loadChunks() {
     try {
       const res = await authFetch(`${API_BASE}/api/chunks`);
-      const data = await res.json();
+      let data = await res.json();
+      if (!Array.isArray(data)) data = data ? [data] : [];
       const tbody = document.getElementById('chunks-table-body');
       tbody.innerHTML = '';
 

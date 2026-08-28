@@ -64,10 +64,11 @@ TOKEN_TTL_SECONDS = int(os.getenv("TOKEN_TTL_SECONDS", "43200"))
 
 
 def _parse_staff_users(raw: str) -> dict:
-    """Parse STAFF_USERS env: 'username:password:Display Name' comma-separated.
+    """Parse STAFF_USERS env: 'username:password:Display Name[:role]' comma-separated.
 
-    Passwords live only in the server environment, never in the repo or the
-    frontend. Set real staff accounts by overriding STAFF_USERS in Render.
+    The optional 4th field is the role ('admin' or 'user'); built-in accounts
+    default to 'admin' so there is always at least one administrator. Passwords
+    live only in the server environment, never in the repo or the frontend.
     """
     users = {}
     for part in (raw or "").split(","):
@@ -78,9 +79,14 @@ def _parse_staff_users(raw: str) -> dict:
         if len(bits) >= 3:
             uname = bits[0].strip().lower()
             password = bits[1]
-            name = ":".join(bits[2:]).strip()
+            role = "admin"
+            if len(bits) >= 4 and bits[-1].strip().lower() in ("admin", "user"):
+                role = bits[-1].strip().lower()
+                name = ":".join(bits[2:-1]).strip()
+            else:
+                name = ":".join(bits[2:]).strip()
             if uname and password and name:
-                users[uname] = {"password": password, "name": name}
+                users[uname] = {"password": password, "name": name, "role": role}
     return users
 
 
@@ -224,27 +230,30 @@ information not present in the conversation. Maximum {MAX_SUMMARY_WORDS} words.
 # Staff session tokens (HMAC-signed, no external JWT dependency)
 # ---------------------------------------------------------------------------
 
-def make_token(username: str, name: str) -> str:
-    """Create a signed, expiring session token carrying the staff identity."""
+def make_token(username: str, name: str, role: str = "user") -> str:
+    """Create a signed, expiring session token carrying the staff identity + role."""
     exp = int(time.time()) + TOKEN_TTL_SECONDS
-    payload = f"{username}|{name}|{exp}"
+    # name is base64'd separately so a '|' in a display name can't corrupt parsing.
+    name_b64 = base64.urlsafe_b64encode(name.encode("utf-8")).decode("ascii")
+    payload = f"{username}|{name_b64}|{role}|{exp}"
     body = base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii")
     sig = hmac.new(AUTH_SECRET.encode(), body.encode(), hashlib.sha256).hexdigest()
     return f"{body}.{sig}"
 
 
 def verify_token(token: str):
-    """Return {'username','name'} if the token is valid and unexpired, else None."""
+    """Return {'username','name','role'} if the token is valid and unexpired, else None."""
     try:
         body, sig = token.split(".", 1)
         expected = hmac.new(AUTH_SECRET.encode(), body.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(sig, expected):
             return None
         payload = base64.urlsafe_b64decode(body.encode("ascii")).decode("utf-8")
-        username, name, exp = payload.split("|", 2)
+        username, name_b64, role, exp = payload.split("|", 3)
         if int(exp) < int(time.time()):
             return None
-        return {"username": username, "name": name}
+        name = base64.urlsafe_b64decode(name_b64.encode("ascii")).decode("utf-8")
+        return {"username": username, "name": name, "role": role}
     except Exception:
         return None
 
@@ -256,6 +265,13 @@ def get_current_staff(authorization: str = Header(None)):
     staff = verify_token(authorization.split(" ", 1)[1].strip())
     if not staff:
         raise HTTPException(status_code=401, detail="Session expired or invalid. Please log in again.")
+    return staff
+
+
+def require_admin(staff: dict = Depends(get_current_staff)):
+    """FastAPI dependency: require the caller to be an admin."""
+    if staff.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Administrator access is required for this action.")
     return staff
 
 
@@ -355,11 +371,16 @@ def init_db():
             name       TEXT NOT NULL,
             salt       TEXT NOT NULL,
             pw_hash    TEXT NOT NULL,
+            role       TEXT NOT NULL DEFAULT 'user',
             created_at TEXT,
             created_by TEXT
         );
         """
     )
+    cursor = conn.execute("PRAGMA table_info(staff_users)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if "role" not in columns:
+        conn.execute("ALTER TABLE staff_users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
     cursor = conn.execute("PRAGMA table_info(course_chunks)")
     columns = [row[1] for row in cursor.fetchall()]
     if "created_at" not in columns:
@@ -387,42 +408,87 @@ def init_db():
 # (SQLite is wiped on Render free-tier restarts); SQLite is the local fallback.
 # ---------------------------------------------------------------------------
 
+def supabase_write_with_fallback(table: str, row: dict, do_upsert: bool = False):
+    """Insert/upsert a row into Supabase, transparently dropping optional columns
+    the target table is missing (schema drift, PostgREST PGRST204). This keeps the
+    core data saving even before an attribution/role migration has been applied.
+    Returns the list of columns that had to be dropped. Raises on real errors.
+    """
+    optional_cols = ("added_by", "resolved_by", "role", "created_by", "created_at")
+    attempt = dict(row)
+    dropped = []
+    for _ in range(len(optional_cols) + 1):
+        try:
+            tbl = supabase_client.table(table)
+            (tbl.upsert(attempt) if do_upsert else tbl.insert(attempt)).execute()
+            return dropped
+        except Exception as e:
+            msg = str(e)
+            removed = False
+            if "PGRST204" in msg or "schema cache" in msg or "column" in msg.lower():
+                for col in optional_cols:
+                    if col in attempt and f"'{col}'" in msg:
+                        del attempt[col]
+                        dropped.append(col)
+                        removed = True
+                        print(f"[SUPABASE] table '{table}' is missing column '{col}'; "
+                              f"saved without it. Apply the schema migration to restore it.")
+                        break
+            if not removed:
+                raise
+    raise RuntimeError(f"Supabase write to '{table}' still failing after dropping optional columns")
+
+
 def load_db_users() -> dict:
-    """Return {username: {name, salt, pw_hash}} for accounts added via the UI."""
+    """Return {username: {name, salt, pw_hash, role}} for accounts added via the UI."""
     if supabase_client:
         try:
             res = supabase_client.table("staff_users").select("*").execute()
-            return {r["username"]: r for r in (res.data or [])}
+            users = {}
+            for r in (res.data or []):
+                r.setdefault("role", "user")
+                users[r["username"]] = r
+            return users
         except Exception as e:
             print(f"Supabase staff_users load warning: {e}")
     conn = get_db()
-    rows = conn.execute("SELECT username, name, salt, pw_hash FROM staff_users").fetchall()
+    rows = conn.execute("SELECT username, name, salt, pw_hash, role FROM staff_users").fetchall()
     conn.close()
     return {r["username"]: dict(r) for r in rows}
 
 
-def add_db_user(username: str, name: str, password: str, created_by: str):
+def add_db_user(username: str, name: str, password: str, role: str, created_by: str):
     salt, pw_hash = hash_password(password)
     now_iso = datetime.now(timezone.utc).isoformat()
     conn = get_db()
     conn.execute(
-        "INSERT INTO staff_users (username, name, salt, pw_hash, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?)",
-        (username, name, salt, pw_hash, now_iso, created_by),
+        "INSERT INTO staff_users (username, name, salt, pw_hash, role, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (username, name, salt, pw_hash, role, now_iso, created_by),
     )
     conn.commit()
     conn.close()
     if supabase_client:
         try:
-            supabase_client.table("staff_users").insert({
-                "username": username,
-                "name": name,
-                "salt": salt,
-                "pw_hash": pw_hash,
-                "created_at": now_iso,
-                "created_by": created_by,
-            }).execute()
+            supabase_write_with_fallback("staff_users", {
+                "username": username, "name": name, "salt": salt, "pw_hash": pw_hash,
+                "role": role, "created_at": now_iso, "created_by": created_by,
+            }, do_upsert=True)
         except Exception as e:
             print(f"Supabase staff_users insert warning: {e}")
+
+
+def set_db_user_password(username: str, new_password: str):
+    """Update a UI-added account's password (salted + re-hashed)."""
+    salt, pw_hash = hash_password(new_password)
+    conn = get_db()
+    conn.execute("UPDATE staff_users SET salt = ?, pw_hash = ? WHERE username = ?", (salt, pw_hash, username))
+    conn.commit()
+    conn.close()
+    if supabase_client:
+        try:
+            supabase_client.table("staff_users").update({"salt": salt, "pw_hash": pw_hash}).eq("username", username).execute()
+        except Exception as e:
+            print(f"Supabase staff_users password update warning: {e}")
 
 
 def remove_db_user(username: str):
@@ -721,6 +787,12 @@ class NewStaffRequest(BaseModel):
     username: str
     name: str
     password: str
+    role: str = "user"
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 
 class ResolveUnansweredRequest(BaseModel):
@@ -743,71 +815,142 @@ def health():
     return {"status": "ok", "db": "supabase" if supabase_client else "sqlite"}
 
 
+# Best-effort in-memory brute-force throttle (per username). Resets on restart;
+# not distributed, but raises the cost of guessing weak passwords.
+_LOGIN_FAILS = {}
+LOGIN_MAX_FAILS = 6
+LOGIN_LOCKOUT_SECONDS = 300
+
+
+def _resolve_login(username: str, password: str):
+    """Return {'name','role'} on valid credentials, else None. Built-in env accounts first."""
+    user = STAFF_USERS.get(username)
+    if user and hmac.compare_digest(str(user["password"]), str(password)):
+        return {"name": user["name"], "role": user.get("role", "admin")}
+    db_user = load_db_users().get(username)
+    if db_user and verify_password(password, db_user["salt"], db_user["pw_hash"]):
+        return {"name": db_user["name"], "role": db_user.get("role", "user")}
+    return None
+
+
 @app.post("/api/login")
 def login(req: LoginRequest):
-    """Authenticate a staff member and return a signed session token.
-
-    Checks built-in accounts (STAFF_USERS env) first, then UI-added accounts
-    stored in the staff_users table.
-    """
+    """Authenticate a staff member and return a signed session token (with role)."""
     username = (req.username or "").strip().lower()
     password = req.password or ""
 
-    # 1. Built-in env accounts (plaintext comparison, constant-time)
-    user = STAFF_USERS.get(username)
-    if user and hmac.compare_digest(str(user["password"]), str(password)):
-        return {"token": make_token(username, user["name"]), "name": user["name"], "username": username}
+    # Brute-force lockout
+    rec = _LOGIN_FAILS.get(username)
+    if rec and rec["count"] >= LOGIN_MAX_FAILS and (time.time() - rec["first"]) < LOGIN_LOCKOUT_SECONDS:
+        wait = int(LOGIN_LOCKOUT_SECONDS - (time.time() - rec["first"]))
+        raise HTTPException(status_code=429, detail=f"Too many failed attempts. Try again in {wait} seconds.")
 
-    # 2. UI-added accounts (salted PBKDF2 hash)
+    identity = _resolve_login(username, password)
+    if not identity:
+        rec = _LOGIN_FAILS.get(username)
+        if not rec or (time.time() - rec["first"]) >= LOGIN_LOCKOUT_SECONDS:
+            _LOGIN_FAILS[username] = {"count": 1, "first": time.time()}
+        else:
+            rec["count"] += 1
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    _LOGIN_FAILS.pop(username, None)  # clear on success
+    token = make_token(username, identity["name"], identity["role"])
+    return {"token": token, "name": identity["name"], "username": username, "role": identity["role"]}
+
+
+@app.get("/api/me")
+def get_me(staff: dict = Depends(get_current_staff)):
+    """Any logged-in staff member: view their own profile (never a password)."""
+    return {"username": staff["username"], "name": staff["name"], "role": staff.get("role", "user")}
+
+
+@app.post("/api/me/password")
+def change_my_password(req: ChangePasswordRequest, staff: dict = Depends(get_current_staff)):
+    """Any logged-in staff member changes ONLY their own password.
+
+    Requires the current password. Built-in env accounts can't be changed here
+    (their password lives in the server configuration).
+    """
+    username = staff["username"]
+    current = req.current_password or ""
+    new = req.new_password or ""
+
+    if username in STAFF_USERS:
+        raise HTTPException(status_code=400, detail="This is a built-in account; its password is set on the server (STAFF_USERS).")
+
     db_user = load_db_users().get(username)
-    if db_user and verify_password(password, db_user["salt"], db_user["pw_hash"]):
-        return {"token": make_token(username, db_user["name"]), "name": db_user["name"], "username": username}
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Account not found.")
+    if not verify_password(current, db_user["salt"], db_user["pw_hash"]):
+        raise HTTPException(status_code=400, detail="Your current password is incorrect.")
+    if len(new) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters.")
+    if new == current:
+        raise HTTPException(status_code=400, detail="New password must be different from the current one.")
+    if new.lower() == username.lower():
+        raise HTTPException(status_code=400, detail="Password must not be the same as your username.")
 
-    raise HTTPException(status_code=401, detail="Invalid username or password")
+    set_db_user_password(username, new)
+    return {"status": "success"}
 
 
 # ---------------------------------------------------------------------------
-# Staff management (any logged-in staff member can add/remove UI accounts)
+# Staff management (admins only). No endpoint ever returns a password/hash.
 # ---------------------------------------------------------------------------
 
 @app.get("/api/staff")
-def list_staff(staff: dict = Depends(get_current_staff)):
+def list_staff(admin: dict = Depends(require_admin)):
     out = []
     for uname, info in STAFF_USERS.items():
-        out.append({"username": uname, "name": info["name"], "builtin": True, "removable": False})
+        out.append({"username": uname, "name": info["name"], "role": info.get("role", "admin"), "builtin": True, "removable": False})
     for uname, info in load_db_users().items():
-        out.append({"username": uname, "name": info["name"], "builtin": False, "removable": True})
+        out.append({"username": uname, "name": info["name"], "role": info.get("role", "user"), "builtin": False, "removable": True})
     return out
 
 
 @app.post("/api/staff")
-def create_staff(req: NewStaffRequest, staff: dict = Depends(get_current_staff)):
+def create_staff(req: NewStaffRequest, admin: dict = Depends(require_admin)):
     uname = (req.username or "").strip().lower()
     name = (req.name or "").strip()
     password = req.password or ""
+    role = (req.role or "user").strip().lower()
 
     if not uname or not uname.isalnum():
         raise HTTPException(status_code=400, detail="Username must contain only letters and numbers.")
     if not name:
         raise HTTPException(status_code=400, detail="Display name is required.")
+    if role not in ("admin", "user"):
+        raise HTTPException(status_code=400, detail="Role must be 'admin' or 'user'.")
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+    if password.lower() == uname:
+        raise HTTPException(status_code=400, detail="Password must not be the same as the username.")
     if uname in STAFF_USERS or uname in load_db_users():
         raise HTTPException(status_code=409, detail="That username already exists.")
 
-    add_db_user(uname, name, password, staff["name"])
-    return {"status": "success", "username": uname, "name": name, "added_by": staff["name"]}
+    add_db_user(uname, name, password, role, admin["name"])
+    return {"status": "success", "username": uname, "name": name, "role": role, "added_by": admin["name"]}
 
 
 @app.delete("/api/staff/{username}")
-def delete_staff(username: str, staff: dict = Depends(get_current_staff)):
+def delete_staff(username: str, admin: dict = Depends(require_admin)):
     uname = (username or "").strip().lower()
     if uname in STAFF_USERS:
         raise HTTPException(status_code=400, detail="Built-in accounts can't be removed from here.")
-    if uname == staff.get("username"):
-        raise HTTPException(status_code=400, detail="You can't remove your own account while logged in.")
-    if uname not in load_db_users():
+    if uname == admin.get("username"):
+        raise HTTPException(status_code=400, detail="You can't remove your own account.")
+    db_users = load_db_users()
+    if uname not in db_users:
         raise HTTPException(status_code=404, detail="User not found.")
+    # Never remove the last remaining admin (built-in env admins also count).
+    if db_users[uname].get("role") == "user":
+        pass
+    else:
+        env_admins = sum(1 for u in STAFF_USERS.values() if u.get("role", "admin") == "admin")
+        db_admins = sum(1 for u in db_users.values() if u.get("role") == "admin")
+        if env_admins + db_admins <= 1:
+            raise HTTPException(status_code=400, detail="Cannot remove the last administrator.")
     remove_db_user(uname)
     return {"status": "deleted", "username": uname}
 
@@ -1024,19 +1167,27 @@ def resolve_unanswered(req: ResolveUnansweredRequest, staff: dict = Depends(get_
 
     if supabase_client:
         try:
-            supabase_client.table("course_chunks").insert({
+            supabase_write_with_fallback("course_chunks", {
                 "chunk_id": chunk_id,
                 "content": combined_knowledge,
                 "embedding": embeddings[0],
                 "doc_type": "staff_faq",
                 "source_file": "staff_dashboard",
                 "added_by": staff_name,
-            }).execute()
-            supabase_client.table("unanswered_log").update({
-                "reviewed": True,
-                "resolution_chunk_id": chunk_id,
-                "resolved_by": staff_name,
-            }).eq("id", req.id).execute()
+            })
+            try:
+                supabase_client.table("unanswered_log").update({
+                    "reviewed": True,
+                    "resolution_chunk_id": chunk_id,
+                    "resolved_by": staff_name,
+                }).eq("id", req.id).execute()
+            except Exception as e2:
+                # resolved_by column may not exist yet; still mark it reviewed.
+                print(f"Supabase resolved_by update degraded: {e2}")
+                supabase_client.table("unanswered_log").update({
+                    "reviewed": True,
+                    "resolution_chunk_id": chunk_id,
+                }).eq("id", req.id).execute()
         except Exception as e:
             print(f"Supabase resolve update warning: {e}")
 
@@ -1046,17 +1197,23 @@ def resolve_unanswered(req: ResolveUnansweredRequest, staff: dict = Depends(get_
 @app.get("/api/chunks")
 def get_chunks(limit: int = Query(50, le=200), staff: dict = Depends(get_current_staff)):
     if supabase_client:
-        try:
-            result = (
-                supabase_client.table("course_chunks")
-                .select("chunk_id,content,doc_type,source_file,created_at,added_by")
-                .order("created_at", desc=True)
-                .limit(limit)
-                .execute()
-            )
-            return result.data or []
-        except Exception as e:
-            print(f"Supabase chunks fallback to SQLite: {e}")
+        # Prefer the full column set; if the attribution column hasn't been
+        # migrated yet, fall back to the base columns rather than dropping to the
+        # ephemeral SQLite copy (which is what made saved chunks look "missing").
+        for cols in ("chunk_id,content,doc_type,source_file,created_at,added_by",
+                     "chunk_id,content,doc_type,source_file,created_at"):
+            try:
+                result = (
+                    supabase_client.table("course_chunks")
+                    .select(cols)
+                    .order("created_at", desc=True)
+                    .limit(limit)
+                    .execute()
+                )
+                return result.data or []
+            except Exception as e:
+                print(f"Supabase chunks select '{cols}' failed: {e}")
+        print("Supabase chunks unavailable; falling back to SQLite.")
 
     conn = get_db()
     rows = conn.execute(
@@ -1123,14 +1280,14 @@ def ingest_text_api(req: IngestTextRequest, staff: dict = Depends(get_current_st
 
         if supabase_client:
             try:
-                supabase_client.table("course_chunks").upsert({
+                supabase_write_with_fallback("course_chunks", {
                     "chunk_id": chunk_id,
                     "content": chunk,
                     "embedding": embedding,
                     "doc_type": req.doc_type,
                     "source_file": source_file,
                     "added_by": staff_name,
-                }).execute()
+                }, do_upsert=True)
             except Exception as e:
                 conn.rollback()
                 conn.close()

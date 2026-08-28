@@ -61,9 +61,22 @@ CREATE TABLE IF NOT EXISTS staff_users (
     name       TEXT NOT NULL,
     salt       TEXT NOT NULL,
     pw_hash    TEXT NOT NULL,
+    role       TEXT NOT NULL DEFAULT 'user',   -- 'admin' or 'user'
     created_at TIMESTAMPTZ DEFAULT now(),
     created_by TEXT
 );
+-- If the table already exists from an earlier version, add the role column:
+ALTER TABLE staff_users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
+
+-- =====================================================================
+-- ONE-SHOT MIGRATION (safe to re-run) - fixes "knowledge/accounts not saving".
+-- Run this whole block once in the Supabase SQL editor.
+-- =====================================================================
+ALTER TABLE course_chunks  ADD COLUMN IF NOT EXISTS added_by    TEXT;
+ALTER TABLE unanswered_log ADD COLUMN IF NOT EXISTS resolved_by TEXT;
+ALTER TABLE staff_users    ADD COLUMN IF NOT EXISTS role        TEXT NOT NULL DEFAULT 'user';
+-- Refresh PostgREST's schema cache so the new columns are visible immediately:
+NOTIFY pgrst, 'reload schema';
 
 -- 5. Vector Similarity Search Function (RPC)
 CREATE OR REPLACE FUNCTION match_chunks (
