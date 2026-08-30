@@ -460,47 +460,75 @@ def load_db_users() -> dict:
 def add_db_user(username: str, name: str, password: str, role: str, created_by: str):
     salt, pw_hash = hash_password(password)
     now_iso = datetime.now(timezone.utc).isoformat()
-    conn = get_db()
-    conn.execute(
-        "INSERT INTO staff_users (username, name, salt, pw_hash, role, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (username, name, salt, pw_hash, role, now_iso, created_by),
-    )
-    conn.commit()
-    conn.close()
+
+    # Supabase is the persistent source of truth. Write it first and treat a
+    # failure there as fatal (when Supabase is configured).
+    supa_ok = False
     if supabase_client:
         try:
             supabase_write_with_fallback("staff_users", {
                 "username": username, "name": name, "salt": salt, "pw_hash": pw_hash,
                 "role": role, "created_at": now_iso, "created_by": created_by,
             }, do_upsert=True)
+            supa_ok = True
         except Exception as e:
-            print(f"Supabase staff_users insert warning: {e}")
+            print(f"Supabase staff_users insert failed: {e}")
+
+    # SQLite is only a local cache (wiped on free-tier restarts). Best-effort:
+    # never let a local schema hiccup fail the request.
+    try:
+        conn = get_db()
+        conn.execute(
+            "INSERT OR REPLACE INTO staff_users (username, name, salt, pw_hash, role, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (username, name, salt, pw_hash, role, now_iso, created_by),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"SQLite staff_users insert warning (non-fatal): {e}")
+
+    if supabase_client and not supa_ok:
+        raise HTTPException(status_code=502, detail="Could not save the account to the persistent database.")
 
 
 def set_db_user_password(username: str, new_password: str):
     """Update a UI-added account's password (salted + re-hashed)."""
     salt, pw_hash = hash_password(new_password)
-    conn = get_db()
-    conn.execute("UPDATE staff_users SET salt = ?, pw_hash = ? WHERE username = ?", (salt, pw_hash, username))
-    conn.commit()
-    conn.close()
+    supa_ok = False
     if supabase_client:
         try:
             supabase_client.table("staff_users").update({"salt": salt, "pw_hash": pw_hash}).eq("username", username).execute()
+            supa_ok = True
         except Exception as e:
-            print(f"Supabase staff_users password update warning: {e}")
+            print(f"Supabase staff_users password update failed: {e}")
+    try:
+        conn = get_db()
+        conn.execute("UPDATE staff_users SET salt = ?, pw_hash = ? WHERE username = ?", (salt, pw_hash, username))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"SQLite password update warning (non-fatal): {e}")
+    if supabase_client and not supa_ok:
+        raise HTTPException(status_code=502, detail="Could not update the password in the persistent database.")
 
 
 def remove_db_user(username: str):
-    conn = get_db()
-    conn.execute("DELETE FROM staff_users WHERE username = ?", (username,))
-    conn.commit()
-    conn.close()
+    supa_ok = False
     if supabase_client:
         try:
             supabase_client.table("staff_users").delete().eq("username", username).execute()
+            supa_ok = True
         except Exception as e:
-            print(f"Supabase staff_users delete warning: {e}")
+            print(f"Supabase staff_users delete failed: {e}")
+    try:
+        conn = get_db()
+        conn.execute("DELETE FROM staff_users WHERE username = ?", (username,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"SQLite staff_users delete warning (non-fatal): {e}")
+    if supabase_client and not supa_ok:
+        raise HTTPException(status_code=502, detail="Could not remove the account from the persistent database.")
 
 
 def log_unanswered(question: str, score: float, conn):
