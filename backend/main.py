@@ -37,7 +37,7 @@ from ingest import ingest_file, chunk_text, embed_chunks
 load_dotenv()
 
 DB_PATH = os.getenv("OLINDA_DB_PATH", "olinda.db")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.6-27b")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "gemini-embedding-001")
 EMBED_DIMENSIONS = int(os.getenv("EMBED_DIMENSIONS", "768"))
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.65"))
@@ -983,7 +983,7 @@ def delete_staff(username: str, admin: dict = Depends(require_admin)):
     return {"status": "deleted", "username": uname}
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def get_index():
     test_page = FRONTEND_DIR / "test_website.html"
     if test_page.exists():

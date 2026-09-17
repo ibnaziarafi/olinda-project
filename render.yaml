@@ -16,7 +16,7 @@ services:
       - key: SUPABASE_KEY
         sync: false
       - key: GROQ_MODEL
-        value: qwen/qwen3.6-27b
+        value: qwen/qwen3.8-27b
       - key: GEMINI_MODEL
         value: gemini-3.6-flash
       - key: EMBED_MODEL
