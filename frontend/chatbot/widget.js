@@ -465,7 +465,7 @@
     <div class="olinda-chat-window hidden" id="olinda-window" role="dialog" aria-label="Olinda chat assistant">
       <div class="olinda-chat-header">
         <div class="olinda-chat-header-info">
-          <span class="olinda-chat-avatar"><img src="${BACKEND_URL}/static/assets/hoco-mark-white.png" alt="" aria-hidden="true"></span>
+          <span class="olinda-chat-avatar" aria-hidden="true">O</span>
           <div>
             <p class="olinda-chat-name">Olinda</p>
             <p class="olinda-chat-status"><span class="olinda-status-dot"></span> Online</p>
