@@ -1166,6 +1166,23 @@ def get_analytics(staff: dict = Depends(get_current_staff)):
 
 @app.get("/api/unanswered")
 def get_unanswered(staff: dict = Depends(get_current_staff)):
+    if supabase_client:
+        for cols in (
+            "id,question,confidence_score,occurred_at,reviewed,resolved_by",
+            "id,question,confidence_score,occurred_at,reviewed",
+        ):
+            try:
+                result = (
+                    supabase_client.table("unanswered_log")
+                    .select(cols)
+                    .order("occurred_at", desc=True)
+                    .execute()
+                )
+                return result.data or []
+            except Exception as e:
+                print(f"Supabase unanswered select '{cols}' failed: {e}")
+        print("Supabase unanswered_log unavailable; falling back to SQLite.")
+
     conn = get_db()
     rows = conn.execute(
         "SELECT id, question, confidence_score, occurred_at, reviewed, resolved_by FROM unanswered_log ORDER BY occurred_at DESC"
