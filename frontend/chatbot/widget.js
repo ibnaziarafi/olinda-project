@@ -11,6 +11,8 @@
   const attrBackend = currentScript && currentScript.getAttribute('data-backend');
   const isLocal = window.location.protocol === 'file:' || ['localhost', '127.0.0.1'].includes(window.location.hostname);
   const BACKEND_URL = attrBackend || (isLocal ? 'http://localhost:8000' : 'https://olinda-ai-backend-chatbot.onrender.com');
+  const ASSET_BASE_URL = currentScript && currentScript.src ? new URL('.', currentScript.src).href : '';
+  const LOGO_URL = `${ASSET_BASE_URL}assets/hoco-mark-white.png`;
 
   // Inject Custom Styles with Forced Internal Margins and Padding
   const styleEl = document.createElement('style');
@@ -465,7 +467,7 @@
     <div class="olinda-chat-window hidden" id="olinda-window" role="dialog" aria-label="Olinda chat assistant">
       <div class="olinda-chat-header">
         <div class="olinda-chat-header-info">
-          <span class="olinda-chat-avatar" aria-hidden="true">O</span>
+          <span class="olinda-chat-avatar"><img src="${LOGO_URL}" alt="" aria-hidden="true"></span>
           <div>
             <p class="olinda-chat-name">Olinda</p>
             <p class="olinda-chat-status"><span class="olinda-status-dot"></span> Online</p>
