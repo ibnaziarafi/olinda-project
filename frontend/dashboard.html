@@ -920,7 +920,8 @@
         loadUnanswered();
         loadAnalytics();
       } else {
-        alert('Failed to resolve question.');
+        const data = await res.json().catch(() => ({}));
+        alert(data.detail || 'Failed to resolve question.');
       }
     } catch (e) {
       console.error('Resolve error:', e);

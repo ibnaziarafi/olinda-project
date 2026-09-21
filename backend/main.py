@@ -1191,12 +1191,21 @@ def get_unanswered(staff: dict = Depends(get_current_staff)):
 @app.post("/api/unanswered/resolve")
 def resolve_unanswered(req: ResolveUnansweredRequest, staff: dict = Depends(get_current_staff)):
     conn = get_db()
+    question = None
     row = conn.execute("SELECT question FROM unanswered_log WHERE id = ?", (req.id,)).fetchone()
-    if not row:
+    if row:
+        question = row["question"]
+    elif supabase_client:
+        try:
+            res = supabase_client.table("unanswered_log").select("question").eq("id", req.id).limit(1).execute()
+            if res.data and len(res.data) > 0:
+                question = res.data[0].get("question")
+        except Exception as e:
+            print(f"Supabase question lookup warning: {e}")
+
+    if not question:
         conn.close()
         raise HTTPException(status_code=404, detail="Unanswered question item not found")
-
-    question = row["question"]
     combined_knowledge = f"Question: {question}\nOfficial Answer: {req.answer}"
     staff_name = staff["name"]
 
