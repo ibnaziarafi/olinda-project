@@ -25,19 +25,21 @@ app = FastAPI(
     version="1.0.0"
 )
 
+frontend_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "FRONTEND_ORIGINS",
+        "https://olinda.rafistacks.dev,https://olinda-ai.vercel.app,http://localhost:3000,http://localhost:5173,http://localhost:5500,http://127.0.0.1:5500",
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://olinda-ai.vercel.app",
-        "https://olinda-ai.onrender.com",
-        "http://localhost:3000",
-        "http://localhost:8000",
-        "http://localhost:8001",
-        "*"
-    ],
+    allow_origins=frontend_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
 )
 
 @app.get("/health")
