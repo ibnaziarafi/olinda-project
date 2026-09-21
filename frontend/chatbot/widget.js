@@ -6,10 +6,11 @@
   if (window.OlindaWidgetInitialized) return;
   window.OlindaWidgetInitialized = true;
 
-  // Determine chatbot backend URL from script tag attributes, window origin, or default to http://localhost:8000
+  // Prefer an explicit backend, then use the local service for local pages and Render in production.
   const currentScript = document.currentScript || Array.from(document.scripts).find(s => s.src && s.src.includes('widget.js'));
   const attrBackend = currentScript && currentScript.getAttribute('data-backend');
-  const BACKEND_URL = attrBackend || (window.location.origin && window.location.origin !== 'null' && !window.location.origin.includes('file://') ? window.location.origin : 'http://localhost:8000');
+  const isLocal = window.location.protocol === 'file:' || ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  const BACKEND_URL = attrBackend || (isLocal ? 'http://localhost:8000' : 'https://olinda-ai-backend-chatbot.onrender.com');
 
   // Inject Custom Styles with Forced Internal Margins and Padding
   const styleEl = document.createElement('style');
