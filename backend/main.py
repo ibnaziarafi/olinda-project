@@ -985,16 +985,22 @@ def delete_staff(username: str, admin: dict = Depends(require_admin)):
 
 
 @app.api_route("/", methods=["GET", "HEAD"])
-@app.api_route("/index.html", methods=["GET", "HEAD"])
-@app.api_route("/frontend/index.html", methods=["GET", "HEAD"])
-def get_index():
-    index_page = FRONTEND_DIR / "index.html"
-    if index_page.exists():
-        return FileResponse(index_page)
+@app.api_route("/test", methods=["GET", "HEAD"])
+@app.api_route("/test_website.html", methods=["GET", "HEAD"])
+def get_test_index():
     test_page = FRONTEND_DIR / "test_website.html"
     if test_page.exists():
         return FileResponse(test_page)
     return {"message": "Olinda Backend API Online"}
+
+
+@app.api_route("/index.html", methods=["GET", "HEAD"])
+@app.api_route("/frontend/index.html", methods=["GET", "HEAD"])
+def get_public_index():
+    index_page = FRONTEND_DIR / "index.html"
+    if index_page.exists():
+        return FileResponse(index_page)
+    return {"message": "Public index.html not found"}
 
 
 @app.get("/dashboard")
