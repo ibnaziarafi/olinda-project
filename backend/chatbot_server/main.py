@@ -5,12 +5,9 @@ Default Port: 8000
 
 import os
 import time
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 from service import (
     init_db, get_db, supabase_client, redact_pii, check_escalation,
@@ -43,9 +40,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FRONTEND_CHATBOT_DIR = Path(__file__).parent.parent.parent / "frontend" / "chatbot"
-
-
 @app.get("/health")
 def health():
     return {
@@ -53,23 +47,6 @@ def health():
         "service": "chatbot_server",
         "db": "supabase" if supabase_client else "sqlite"
     }
-
-
-@app.get("/widget.js")
-@app.get("/static/widget.js")
-def get_widget_js():
-    widget_file = FRONTEND_CHATBOT_DIR / "widget.js"
-    if widget_file.exists():
-        return FileResponse(
-            widget_file,
-            media_type="application/javascript",
-            headers={
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                "Pragma": "no-cache",
-                "Expires": "0"
-            }
-        )
-    raise HTTPException(status_code=404, detail="widget.js not found in chatbot frontend directory")
 
 
 @app.post("/chat", response_model=ChatResponse)
