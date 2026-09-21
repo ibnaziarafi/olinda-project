@@ -15,36 +15,24 @@ import hashlib
 from pathlib import Path
 from datetime import datetime, timezone
 
-import numpy as np
-from typing import List, Optional
+from typing import List
 from dotenv import load_dotenv
 from fastapi import HTTPException, Depends, Header
 from pydantic import BaseModel
 from google import genai
 from google.genai import types as genai_types
-from groq import Groq
-
-from ingestion import embed_chunks
 
 load_dotenv()
 
 DB_PATH = os.getenv("OLINDA_DB_PATH", "olinda.db")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
-EMBED_MODEL = os.getenv("EMBED_MODEL", "gemini-embedding-001")
-EMBED_DIMENSIONS = int(os.getenv("EMBED_DIMENSIONS", "768"))
-CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.65"))
-TOP_K = int(os.getenv("TOP_K", "4"))
-RAG_TOP_K = int(os.getenv("RAG_TOP_K", "3"))
-MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "8"))
 MAX_RECENT_MESSAGES = int(os.getenv("MAX_RECENT_MESSAGES", "4"))
-MAX_SUMMARY_TOKENS = int(os.getenv("MAX_SUMMARY_TOKENS", "400"))
 MAX_SUMMARY_WORDS = 300
+MAX_SUMMARY_TOKENS = int(os.getenv("MAX_SUMMARY_TOKENS", "400"))
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+STUDENT_SERVICES_CONTACT = "hobart.college@decyp.tas.gov.au or (03) 6220 3133"
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-STUDENT_SERVICES_CONTACT = "hobart.college@decyp.tas.gov.au or (03) 6220 3133"
 
 # ---------------------------------------------------------------------------
 # Staff authentication config
@@ -300,6 +288,7 @@ if SUPABASE_URL and SUPABASE_KEY and not is_placeholder_url:
         raise RuntimeError(f"Supabase is configured but could not be initialized: {e}") from e
 
 USING_SUPABASE = supabase_client is not None
+gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
 
 
 def get_db():
@@ -560,153 +549,8 @@ def log_message(session_id: str, user_message: str, bot_reply: str, score: float
 
 
 # ---------------------------------------------------------------------------
-# Vector Search & Retrieval
+# Dashboard request models
 # ---------------------------------------------------------------------------
-
-gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
-groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
-
-
-def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
-    denom = (np.linalg.norm(a) * np.linalg.norm(b))
-    return float(np.dot(a, b) / denom) if denom else 0.0
-
-
-def embed_query(message: str) -> list[float]:
-    result = gemini_client.models.embed_content(
-        model=EMBED_MODEL,
-        contents=message,
-        config=genai_types.EmbedContentConfig(
-            output_dimensionality=EMBED_DIMENSIONS,
-            task_type="RETRIEVAL_QUERY",
-        ),
-    )
-    return result.embeddings[0].values
-
-
-def retrieve_context(message: str, conn):
-    embedding_start = time.perf_counter()
-    query_vector = embed_query(message)
-    print(f"[CHAT] Embedding: {time.perf_counter() - embedding_start:.2f}s")
-
-    if supabase_client:
-        try:
-            rpc_res = supabase_client.rpc("match_chunks", {
-                "query_embedding": query_vector,
-                "match_threshold": 0.1,
-                "match_count": RAG_TOP_K
-            }).execute()
-            if rpc_res.data:
-                chunks = [row["content"] for row in rpc_res.data]
-                top_score = float(rpc_res.data[0]["similarity"]) if rpc_res.data else 0.0
-                return chunks, top_score
-        except Exception as e:
-            print(f"Supabase vector search fallback to SQLite: {e}")
-
-    query_embedding = np.array(query_vector)
-    rows = conn.execute("SELECT content, embedding FROM course_chunks").fetchall()
-    if not rows:
-        return [], 0.0
-
-    scored = []
-    for row in rows:
-        try:
-            chunk_embedding = np.array(json.loads(row["embedding"]))
-            score = cosine_similarity(query_embedding, chunk_embedding)
-            scored.append((row["content"], score))
-        except Exception:
-            continue
-
-    scored.sort(key=lambda x: x[1], reverse=True)
-    top = scored[:RAG_TOP_K]
-    top_score = top[0][1] if top else 0.0
-    return [c for c, _ in top], top_score
-
-
-def generate_gemini_response(messages):
-    prompt = "\n\n".join(
-        f"{message['role'].upper()}:\n{message['content']}"
-        for message in messages
-    )
-    response = gemini_client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=prompt,
-        config=genai_types.GenerateContentConfig(
-            temperature=0.2,
-            max_output_tokens=700,
-        ),
-    )
-    return response.text or ""
-
-
-def generate_llm_response(messages):
-    request_chars = sum(len(message.get("content", "")) for message in messages)
-    try:
-        print(f"[LLM] Primary: {GROQ_MODEL}")
-        response = groq_client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=messages,
-            temperature=0.2,
-            max_tokens=700,
-            reasoning_effort="none",
-        )
-        reply = response.choices[0].message.content
-        if reply:
-            print(f"[LLM] Primary success: {GROQ_MODEL}")
-            return reply
-        print(f"[LLM] Primary returned an empty response: {GROQ_MODEL}")
-    except Exception as error:
-        error_text = str(error)
-        print(
-            f"[LLM] Primary error ({GROQ_MODEL}) | messages: {len(messages)} | "
-            f"request chars: {request_chars}: {error_text}"
-        )
-
-    try:
-        print(f"[LLM] Falling back to Gemini: {GEMINI_MODEL}")
-        reply = generate_gemini_response(messages)
-        if reply:
-            print(f"[LLM] Gemini success: {GEMINI_MODEL}")
-            return reply
-        print(f"[LLM] Gemini returned an empty response: {GEMINI_MODEL}")
-    except Exception as error:
-        print(
-            f"[LLM] Gemini error ({GEMINI_MODEL}) | messages: {len(messages)} | "
-            f"request chars: {request_chars}: {error}"
-        )
-
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Data Models
-# ---------------------------------------------------------------------------
-
-class ActionLink(BaseModel):
-    title: str
-    url: str
-
-
-class MessageItem(BaseModel):
-    role: str
-    content: str
-
-
-class ChatRequest(BaseModel):
-    session_id: str = "default_session"
-    messages: List[MessageItem] = []
-    conversation_summary: str = ""
-    query: Optional[str] = None
-    message: Optional[str] = None
-
-
-class ChatResponse(BaseModel):
-    reply: str
-    escalated: bool
-    confidence: float
-    action_links: Optional[List[ActionLink]] = None
-    conversation_summary: Optional[str] = None
-
 
 class LoginRequest(BaseModel):
     username: str
@@ -736,25 +580,3 @@ class IngestTextRequest(BaseModel):
     source_file: str = "dashboard_text_input"
 
 
-def extract_action_links(chunks: list[str]) -> Optional[list[ActionLink]]:
-    if not chunks:
-        return None
-
-    url_pattern = re.compile(r'https?://[^\s<>"\'\)]+')
-    links = []
-    seen = set()
-
-    for chunk in chunks:
-        matches = url_pattern.findall(chunk)
-        for url in matches:
-            clean_url = url.rstrip(".,;")
-            if clean_url not in seen:
-                seen.add(clean_url)
-                title = "View Course Details"
-                if "tasc.tas.gov.au" in clean_url:
-                    title = "View TASC Course Details"
-                elif "hobartcollege" in clean_url:
-                    title = "Visit Hobart College Page"
-                links.append(ActionLink(title=title, url=clean_url))
-
-    return links if links else None
