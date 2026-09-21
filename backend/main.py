@@ -303,11 +303,12 @@ def verify_password(password: str, salt: str, expected_hash: str) -> bool:
 # ---------------------------------------------------------------------------
 
 supabase_client = None
-if SUPABASE_URL and SUPABASE_KEY:
+is_placeholder_url = not SUPABASE_URL or any(p in SUPABASE_URL for p in ("your-project-ref", "your_supabase", "example.com", "YOUR_"))
+if SUPABASE_URL and SUPABASE_KEY and not is_placeholder_url:
     try:
         from supabase import create_client
         supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        print("Connected to Supabase PostgreSQL + pgvector.")
+        print(f"Supabase client initialized for {SUPABASE_URL}")
     except Exception as e:
         print(f"Warning: Could not initialize Supabase client: {e}")
 
@@ -984,7 +985,12 @@ def delete_staff(username: str, admin: dict = Depends(require_admin)):
 
 
 @app.api_route("/", methods=["GET", "HEAD"])
+@app.api_route("/index.html", methods=["GET", "HEAD"])
+@app.api_route("/frontend/index.html", methods=["GET", "HEAD"])
 def get_index():
+    index_page = FRONTEND_DIR / "index.html"
+    if index_page.exists():
+        return FileResponse(index_page)
     test_page = FRONTEND_DIR / "test_website.html"
     if test_page.exists():
         return FileResponse(test_page)
@@ -992,6 +998,8 @@ def get_index():
 
 
 @app.get("/dashboard")
+@app.get("/dashboard.html")
+@app.get("/frontend/dashboard.html")
 def get_dashboard():
     dashboard_page = FRONTEND_DIR / "dashboard.html"
     if dashboard_page.exists():
