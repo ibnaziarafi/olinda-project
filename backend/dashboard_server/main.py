@@ -13,8 +13,6 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 from service import (
     init_db, get_db, supabase_client, USING_SUPABASE, supabase_count, supabase_write_with_fallback,
@@ -48,9 +46,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FRONTEND_DASHBOARD_DIR = Path(__file__).parent.parent.parent / "frontend" / "dashboard"
-
-
 @app.get("/health")
 def health():
     return {
@@ -60,23 +55,13 @@ def health():
     }
 
 
-# Serve Dashboard UI
 @app.get("/")
-@app.get("/dashboard")
-@app.get("/dashboard.html")
-def get_dashboard():
-    dashboard_page = FRONTEND_DASHBOARD_DIR / "dashboard.html"
-    if dashboard_page.exists():
-        return FileResponse(dashboard_page)
-    return {"message": "Dashboard UI file not found"}
-
-
-@app.get("/test_website.html")
-def get_test_website():
-    test_page = FRONTEND_DASHBOARD_DIR / "test_website.html"
-    if test_page.exists():
-        return FileResponse(test_page)
-    return {"message": "Test website file not found"}
+def service_info():
+    return {
+        "service": "dashboard_server",
+        "message": "Dashboard API is running. Host the dashboard frontend separately.",
+        "health": "/health",
+    }
 
 
 # ---------------------------------------------------------------------------
