@@ -41,7 +41,9 @@ if SUPABASE_URL and SUPABASE_KEY:
         supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
         print("Connected to Supabase pgvector instance.")
     except Exception as e:
-        print(f"Warning: Could not connect to Supabase: {e}")
+        raise RuntimeError(f"Supabase is configured but could not be initialized: {e}") from e
+
+    USING_SUPABASE = supabase_client is not None
 
 
 def embed_chunks(chunks: list[str]) -> list[list[float]]:
@@ -171,29 +173,22 @@ def ingest_file(file_path: str, subject_code=None, tasc_level=None, career_field
     print(f"Split into {len(chunks)} chunks. Embedding via Gemini...")
     embeddings = embed_chunks(chunks)
 
-    # 1. Save to SQLite
-    conn = sqlite3.connect(DB_PATH)
-    ensure_sqlite_table(conn)
+    # SQLite is only used when Supabase is not configured for local testing.
+    conn = None
+    if not USING_SUPABASE:
+        conn = sqlite3.connect(DB_PATH)
+        ensure_sqlite_table(conn)
     now_str = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     for chunk, embedding in zip(chunks, embeddings):
         chunk_id = str(uuid.uuid4())
-        conn.execute(
-            """INSERT INTO course_chunks
-               (chunk_id, content, embedding, subject_code, tasc_level, career_field, doc_type, source_file, created_at, added_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                chunk_id,
-                chunk,
-                json.dumps(embedding),
-                subject_code,
-                tasc_level,
-                career_field,
-                doc_type,
-                os.path.basename(file_path),
-                now_str,
-                added_by,
-            ),
-        )
+        if conn:
+            conn.execute(
+                """INSERT INTO course_chunks
+                   (chunk_id, content, embedding, subject_code, tasc_level, career_field, doc_type, source_file, created_at, added_by)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (chunk_id, chunk, json.dumps(embedding), subject_code, tasc_level,
+                 career_field, doc_type, os.path.basename(file_path), now_str, added_by),
+            )
 
         # 2. Save to Supabase pgvector if configured. Drop optional columns the
         #    table hasn't been migrated for yet, so the chunk still persists.
@@ -226,8 +221,9 @@ def ingest_file(file_path: str, subject_code=None, tasc_level=None, career_field
                         print(f"Supabase insert warning: {e}")
                         break
 
-    conn.commit()
-    conn.close()
+    if conn:
+        conn.commit()
+        conn.close()
     print(f"Done — {len(chunks)} chunks stored successfully.")
     return len(chunks)
 

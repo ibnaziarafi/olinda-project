@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+google-genai
+groq
+numpy
+python-dotenv
+pydantic
+supabase
