@@ -993,9 +993,6 @@ def get_main_website():
     test_page = FRONTEND_DIR / "test_website.html"
     if test_page.exists():
         return FileResponse(test_page)
-    index_page = FRONTEND_DIR / "index.html"
-    if index_page.exists():
-        return FileResponse(index_page)
     return {"message": "Olinda Backend API Online"}
 
 

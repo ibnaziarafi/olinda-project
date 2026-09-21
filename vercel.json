@@ -3,6 +3,8 @@
   "name": "olinda-frontend",
   "outputDirectory": "frontend",
   "rewrites": [
+    { "source": "/", "destination": "/test_website.html" },
+    { "source": "/index.html", "destination": "/test_website.html" },
     { "source": "/dashboard", "destination": "/dashboard.html" },
     { "source": "/widget.js", "destination": "/widget.js" }
   ],
