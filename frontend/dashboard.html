@@ -596,7 +596,7 @@
   // When served locally (mock/dev) talk to the same origin; in production
   // (e.g. on Vercel) the static page talks to the deployed FastAPI backend.
   const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
-  const API_BASE = LOCAL ? location.origin : 'https://olinda-ai.onrender.com';
+  const API_BASE = LOCAL ? location.origin : 'https://olinda-ai-backend-dashboard.onrender.com';
 
   // ---- Auth state -------------------------------------------------------
   const TOKEN_KEY = 'olinda_staff_token';
