@@ -351,6 +351,7 @@ CREATE TABLE unanswered_log (
 ## 8. Summary — what changes from your current build
 
 - Frontend: same file, same look, just swap the keyword-matching function for a `fetch('/chat')` call.
+- Experiment v2: this branch is reserved for the next implementation experiment.
 - New: FastAPI backend, one Postgres database (pgvector + logs), Claude Haiku 4.5 for generation.
 - New: an escalation layer that catches the "don't answer this" cases your project already defined, before they ever reach the model.
 - New: an `unanswered_log` table that gives the team (and Student Services) a running list of what the FAQ is missing — this is the actual admin-load reducer over time, not just the chatbot itself.

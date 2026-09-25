@@ -3,10 +3,16 @@
   "name": "olinda-frontend",
   "outputDirectory": "frontend",
   "rewrites": [
-    { "source": "/", "destination": "/test_website.html" },
-    { "source": "/index.html", "destination": "/test_website.html" },
-    { "source": "/dashboard", "destination": "/dashboard.html" },
-    { "source": "/widget.js", "destination": "/widget.js" }
+    { "source": "/", "destination": "/dashboard/test_website.html" },
+    { "source": "/index.html", "destination": "/dashboard/test_website.html" },
+    { "source": "/test_website.html", "destination": "/dashboard/test_website.html" },
+    { "source": "/dashboard", "destination": "/dashboard/dashboard.html" },
+    { "source": "/dashboard.html", "destination": "/dashboard/dashboard.html" },
+    { "source": "/dashboard.css", "destination": "/dashboard/dashboard.css" },
+    { "source": "/scripts/:path*", "destination": "/dashboard/scripts/:path*" },
+    { "source": "/widget.js", "destination": "/chatbot/widget.js" },
+    { "source": "/widget.css", "destination": "/chatbot/widget.css" },
+    { "source": "/modules/:path*", "destination": "/chatbot/modules/:path*" }
   ],
   "headers": [
     {

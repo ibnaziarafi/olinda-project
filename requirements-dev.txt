@@ -1,0 +1,3 @@
+-r backend/chatbot_server/requirements.txt
+-r backend/dashboard_server/requirements.txt
+httpx
