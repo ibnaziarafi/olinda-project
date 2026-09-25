@@ -470,7 +470,7 @@
           <span class="olinda-chat-avatar"><img src="${LOGO_URL}" alt="" aria-hidden="true"></span>
           <div>
             <p class="olinda-chat-name">Olinda</p>
-            <p class="olinda-chat-status"><span class="olinda-status-dot"></span> Online</p>
+            <p class="olinda-chat-status" id="olinda-server-status"><span class="olinda-status-dot"></span> Connecting...</p>
           </div>
         </div>
         <button class="olinda-chat-close" id="olinda-close" aria-label="Close chat">×</button>
@@ -492,6 +492,23 @@
   const messagesEl = document.getElementById('olinda-messages');
   const inputEl = document.getElementById('olinda-input');
   const sendBtn = document.getElementById('olinda-send');
+  const CHATBOT_HEALTH_URL = 'https://olinda-ai-backend-chatbot.onrender.com/health';
+  const HEALTH_CHECK_INTERVAL = 13 * 60 * 1000;
+  const serverStatusEl = document.getElementById('olinda-server-status');
+
+  async function checkChatbotHealth() {
+    serverStatusEl.lastChild.textContent = ' Connecting...';
+    try {
+      const response = await fetch(CHATBOT_HEALTH_URL, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`Health check returned ${response.status}`);
+      serverStatusEl.lastChild.textContent = ' Server up';
+    } catch (error) {
+      serverStatusEl.lastChild.textContent = ' Server unavailable';
+    }
+  }
+
+  checkChatbotHealth();
+  setInterval(checkChatbotHealth, HEALTH_CHECK_INTERVAL);
 
   let hasGreeted = false;
 

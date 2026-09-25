@@ -349,6 +349,7 @@
     <div class="login-logo">O</div>
     <h1>Staff Sign In</h1>
     <p class="sub">Hobart College · Olinda Management Portal</p>
+    <div id="server-status" style="text-align:center; color:var(--ink-soft); font-size:0.78rem; margin-bottom:18px;">Connecting to dashboard server...</div>
     <div id="login-error"></div>
     <label for="login-username">Username</label>
     <input type="text" id="login-username" autocomplete="username" required autofocus />
@@ -413,7 +414,7 @@
       <div class="section-title">System Status</div>
       <div class="section-desc">Olinda RAG pipeline operational using Gemini Embeddings + Groq Llama 3.3. Dual database active (Supabase PostgreSQL pgvector / SQLite local).</div>
       <div>
-        <span class="tag tag-success">● API Online</span>
+        <span class="tag tag-info" id="dashboard-api-status">● Connecting to API...</span>
         <span class="tag tag-info">Free Tier Mode ($0)</span>
       </div>
     </div>
@@ -597,6 +598,29 @@
   // (e.g. on Vercel) the static page talks to the deployed FastAPI backend.
   const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
   const API_BASE = LOCAL ? location.origin : 'https://olinda-ai-backend-dashboard.onrender.com';
+  const DASHBOARD_HEALTH_URL = 'https://olinda-ai-backend-dashboard.onrender.com/health';
+  const HEALTH_CHECK_INTERVAL = 13 * 60 * 1000;
+
+  async function checkDashboardHealth() {
+    const loginStatus = document.getElementById('server-status');
+    const dashboardStatus = document.getElementById('dashboard-api-status');
+    loginStatus.textContent = 'Connecting to dashboard server...';
+    dashboardStatus.textContent = '● Connecting to API...';
+    try {
+      const response = await fetch(DASHBOARD_HEALTH_URL, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`Health check returned ${response.status}`);
+      loginStatus.textContent = 'Dashboard server up';
+      dashboardStatus.textContent = '● Server up';
+      dashboardStatus.className = 'tag tag-success';
+    } catch (error) {
+      loginStatus.textContent = 'Dashboard server unavailable';
+      dashboardStatus.textContent = '● Server unavailable';
+      dashboardStatus.className = 'tag tag-warning';
+    }
+  }
+
+  checkDashboardHealth();
+  setInterval(checkDashboardHealth, HEALTH_CHECK_INTERVAL);
 
   // ---- Auth state -------------------------------------------------------
   const TOKEN_KEY = 'olinda_staff_token';
