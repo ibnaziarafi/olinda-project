@@ -3,10 +3,10 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from database import init_db
-from auth_routes import router as auth_router
-from analytics_routes import router as analytics_router
-from knowledge_routes import router as knowledge_router
+from data.database import init_db
+from api.auth_routes import router as auth_router
+from api.analytics_routes import router as analytics_router
+from api.knowledge_routes import router as knowledge_router
 
 @asynccontextmanager
 async def lifespan(app):

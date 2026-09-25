@@ -1,17 +1,18 @@
 """Run separately: the two independently deployed services use local module names."""
 import os
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 os.environ.update(SUPABASE_URL='', SUPABASE_KEY='', GEMINI_API_KEY='local-test-key', PYTHON_DOTENV_DISABLED='1', STAFF_USERS='testadmin:test-only-password:Test Admin:admin', AUTH_SECRET='local-test-secret')
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'backend/dashboard_server'))
 from fastapi.testclient import TestClient
-import database
+from data import database
 import main
 
-with tempfile.TemporaryDirectory() as directory, patch.object(database, 'DB_PATH', str(Path(directory)/'dashboard.db')):
+test_db = Path(__file__).with_name('.test-dashboard.db')
+test_db.unlink(missing_ok=True)
+with patch.object(database, 'DB_PATH', str(test_db)):
     with TestClient(main.app) as client:
         assert client.get('/health').status_code == 200
         assert client.get('/api/staff').status_code == 401
@@ -30,3 +31,4 @@ with tempfile.TemporaryDirectory() as directory, patch.object(database, 'DB_PATH
         assert client.get('/api/staff', headers=user_headers).status_code == 403
         assert client.delete('/api/staff/newstaff', headers=headers).status_code == 200
 print('PASS: dashboard startup, authentication, staff persistence, authorization, analytics and knowledge routes')
+test_db.unlink(missing_ok=True)

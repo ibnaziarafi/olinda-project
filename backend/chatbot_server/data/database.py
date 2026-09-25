@@ -2,7 +2,7 @@
 import sqlite3
 import uuid
 from datetime import datetime, timezone
-from config import DB_PATH, SUPABASE_URL, SUPABASE_KEY
+from core.config import DB_PATH, SUPABASE_URL, SUPABASE_KEY
 
 supabase_client = None
 is_placeholder_url = not SUPABASE_URL or any(p in SUPABASE_URL for p in ("your-project-ref", "your_supabase", "example.com", "YOUR_"))

@@ -3,9 +3,9 @@ import json
 import time
 import numpy as np
 from google.genai import types as genai_types
-from clients import gemini
-from database import supabase_client
-from config import EMBED_MODEL, EMBED_DIMENSIONS, RAG_TOP_K
+from ai.clients import gemini
+from data.database import supabase_client
+from core.config import EMBED_MODEL, EMBED_DIMENSIONS, RAG_TOP_K
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     denom = (np.linalg.norm(a) * np.linalg.norm(b))

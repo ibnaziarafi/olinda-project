@@ -1,9 +1,9 @@
 """Conversation context and rolling summaries."""
 from typing import List
 from google.genai import types as genai_types
-from clients import gemini
-from config import MAX_RECENT_MESSAGES, MAX_SUMMARY_WORDS, MAX_SUMMARY_TOKENS, GEMINI_MODEL
-from guardrails import redact_pii, clean_llm_response
+from ai.clients import gemini
+from core.config import MAX_RECENT_MESSAGES, MAX_SUMMARY_WORDS, MAX_SUMMARY_TOKENS, GEMINI_MODEL
+from core.guardrails import redact_pii, clean_llm_response
 
 def build_llm_messages(system_content: str, history: List, safe_message: str, summary: str = ""):
     llm_messages = [{"role": "system", "content": system_content}]

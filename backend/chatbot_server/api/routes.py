@@ -1,8 +1,8 @@
 """HTTP endpoints; always release per-request database connections."""
 from fastapi import APIRouter, HTTPException
-from chat import answer
-from database import get_db, supabase_client, save_feedback
-from models import ChatRequest, ChatResponse, FeedbackRequest
+from ai.chat import answer
+from data.database import get_db, supabase_client, save_feedback
+from api.models import ChatRequest, ChatResponse, FeedbackRequest
 
 router = APIRouter()
 

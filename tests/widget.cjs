@@ -25,7 +25,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.url === '/host') {
     res.setHeader('Content-Type', 'text/html');
-    res.end(`<!doctype html><html><head><meta charset="utf-8"><title>College integration test</title><style>body{background:#e9eef2;padding:50px;font-family:system-ui}button{background:red!important;font-size:50px!important}header{display:none!important}</style><script defer src="http://localhost:5511/chatbot/widget.js" data-backend="http://localhost:5511"></script></head><body><h1>A college website</h1><p>The assistant works independently of this page’s styles.</p></body></html>`); return;
+    res.end(`<!doctype html><html><head><meta charset="utf-8"><title>College integration test</title><style>body{background:#e9eef2;padding:50px;font-family:system-ui}button{background:red!important;font-size:50px!important}header{display:none!important}</style><script defer src="http://localhost:5511/chatbot/widget.js" data-backend="http://localhost:5511"></script></head><body><h1>A college website</h1><p>The assistant works independently of this pageâ€™s styles.</p></body></html>`); return;
   }
   const file = path.resolve(root, '.' + new URL(req.url, 'http://localhost').pathname);
   if (!file.startsWith(root + path.sep) || !fs.existsSync(file)) { res.statusCode = 404; res.end(); return; }

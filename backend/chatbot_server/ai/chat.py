@@ -1,14 +1,14 @@
 """Chat orchestration, independent of HTTP routing."""
 import time
 from fastapi import HTTPException
-from config import CONFIDENCE_THRESHOLD, MAX_HISTORY_MESSAGES, STUDENT_SERVICES_CONTACT, COLLEGE_NAME, SYSTEM_PROMPT
-from database import log_message, log_unanswered
-from guardrails import redact_pii, check_escalation
-from retrieval import retrieve_context
-from memory import summarize_conversation, build_llm_messages
-from llm import generate_llm_response
-from links import extract_action_links
-from models import ChatRequest, ChatResponse
+from core.config import CONFIDENCE_THRESHOLD, MAX_HISTORY_MESSAGES, STUDENT_SERVICES_CONTACT, COLLEGE_NAME, SYSTEM_PROMPT
+from data.database import log_message, log_unanswered
+from core.guardrails import redact_pii, check_escalation
+from data.retrieval import retrieve_context
+from ai.memory import summarize_conversation, build_llm_messages
+from ai.llm import generate_llm_response
+from data.links import extract_action_links
+from api.models import ChatRequest, ChatResponse
 
 def answer(req: ChatRequest, conn):
     request_start = time.perf_counter()

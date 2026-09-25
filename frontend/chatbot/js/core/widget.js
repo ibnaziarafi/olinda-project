@@ -1,12 +1,12 @@
 import { createApi } from './api.js';
 import { createSession } from './session.js';
-import { createView } from './view.js';
+import { createView } from '../ui/view.js';
 
 export async function mount(config) {
   const host = document.createElement('div'); host.id = 'olinda-widget-root';
   const shadow = host.attachShadow({ mode: 'open' });
   const stylesheet = document.createElement('link'); stylesheet.rel = 'stylesheet';
-  stylesheet.href = new URL('../widget.css', import.meta.url).href;
+  stylesheet.href = new URL('../../ui/widget.css', import.meta.url).href;
   const loaded = new Promise((resolve, reject) => { stylesheet.onload = resolve; stylesheet.onerror = () => reject(new Error('Widget stylesheet could not load')); });
   shadow.append(stylesheet); document.body.append(host);
   try { await loaded; } catch (error) { host.remove(); throw error; }
@@ -52,7 +52,7 @@ export async function mount(config) {
       session.save();
     } catch (error) {
       if (requestGeneration !== generation || destroyed) return;
-      view.message({ role: 'assistant', content: error.name === 'AbortError' ? 'This is taking longer than usual. Please try again in a moment.' : 'I couldn’t connect just now. Please try again or contact Student Services.' }, vote);
+      view.message({ role: 'assistant', content: error.name === 'AbortError' ? 'This is taking longer than usual. Please try again in a moment.' : 'I couldnâ€™t connect just now. Please try again or contact Student Services.' }, vote);
     } finally {
       if (requestGeneration === generation && !destroyed) { pending = null; view.busy(false); }
     }

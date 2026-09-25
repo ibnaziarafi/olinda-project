@@ -4,9 +4,9 @@ import hashlib
 import hmac
 import time
 from fastapi import HTTPException, Depends, Header
-from config import AUTH_SECRET, TOKEN_TTL_SECONDS, STAFF_USERS
-from passwords import verify_password
-from staff import load_db_users
+from core.config import AUTH_SECRET, TOKEN_TTL_SECONDS, STAFF_USERS
+from core.passwords import verify_password
+from data.staff import load_db_users
 
 _LOGIN_FAILS = {}
 LOGIN_MAX_FAILS = 6

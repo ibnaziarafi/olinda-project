@@ -11,7 +11,7 @@
     college: script.dataset.college || 'Hobart College',
     autoOpen: script.dataset.autoOpen === 'true',
   };
-  const entry = new URL('./modules/widget.js', script.src).href;
+  const entry = new URL('./js/core/widget.js', script.src).href;
   async function start() {
     try {
       const { mount } = await import(entry);

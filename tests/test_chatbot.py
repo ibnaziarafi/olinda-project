@@ -1,7 +1,6 @@
 """API regressions with a temporary database and no external model calls."""
 import os
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -12,14 +11,15 @@ os.environ['PYTHON_DOTENV_DISABLED'] = '1'
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backend/chatbot_server'))
 
 from fastapi.testclient import TestClient
-import database
+from data import database
 import main
 
 
 class ChatbotTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        self.db_patch = patch.object(database, 'DB_PATH', str(Path(self.temp.name)/'test.db'))
+        self.test_db = Path(__file__).with_name('.test-chatbot.db')
+        self.test_db.unlink(missing_ok=True)
+        self.db_patch = patch.object(database, 'DB_PATH', str(self.test_db))
         self.db_patch.start()
         self.client = TestClient(main.app)
         self.client.__enter__()
@@ -27,7 +27,7 @@ class ChatbotTests(unittest.TestCase):
     def tearDown(self):
         self.client.__exit__(None, None, None)
         self.db_patch.stop()
-        self.temp.cleanup()
+        self.test_db.unlink(missing_ok=True)
 
     def test_escalation_returns_persistent_answer_and_changeable_vote(self):
         response = self.client.post('/chat', json={'session_id': 'test-session', 'query': 'change my timetable'})
@@ -50,7 +50,7 @@ class ChatbotTests(unittest.TestCase):
         vote['rating'] = 'invalid'
         self.assertEqual(self.client.post('/feedback', json=vote).status_code, 422)
 
-    @patch('chat.retrieve_context', return_value=([], 0.0))
+    @patch('ai.chat.retrieve_context', return_value=([], 0.0))
     def test_low_confidence_is_logged(self, _retrieve):
         response = self.client.post('/chat', json={'query': 'An unknown course'})
         self.assertEqual(response.status_code, 200)
@@ -61,8 +61,8 @@ class ChatbotTests(unittest.TestCase):
         finally:
             conn.close()
 
-    @patch('chat.generate_llm_response', return_value='A grounded answer')
-    @patch('chat.retrieve_context', return_value=(['Course details https://example.edu/course'], .9))
+    @patch('ai.chat.generate_llm_response', return_value='A grounded answer')
+    @patch('ai.chat.retrieve_context', return_value=(['Course details https://example.edu/course'], .9))
     def test_answer_contract_and_guardrail_prompt(self, _retrieve, generate):
         response = self.client.post('/chat', json={'query': 'Which course?', 'session_id': 'session-a'})
         self.assertEqual(response.status_code, 200)

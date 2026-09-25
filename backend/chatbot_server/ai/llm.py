@@ -1,8 +1,8 @@
 """Response generation with the existing provider fallback."""
 from google.genai import types as genai_types
-from clients import gemini, groq
-from config import GEMINI_MODEL, GROQ_MODEL
-from guardrails import clean_llm_response
+from ai.clients import gemini, groq
+from core.config import GEMINI_MODEL, GROQ_MODEL
+from core.guardrails import clean_llm_response
 
 def generate_gemini_response(messages):
     prompt = "\n\n".join(

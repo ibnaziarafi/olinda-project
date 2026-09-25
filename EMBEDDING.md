@@ -3,7 +3,7 @@
 The widget is plain browser JavaScript with a Shadow DOM boundary. It needs no
 React, Angular, Vue, CSS framework, npm install, or build step on the college site.
 Copy the **whole `frontend/chatbot` directory** to an HTTPS static host, preserving
-the `modules` directory and `widget.css`. The site owner adds this once to the HTML
+the `js` and `ui` directories. The site owner adds this once to the HTML
 document (React: `public/index.html` or app shell; Angular: `src/index.html`):
 
 ```html
@@ -54,11 +54,11 @@ Feedback requires both the answer ID and its unguessable session ID.
 ## Source layout
 
 - `frontend/chatbot/widget.js`: small public loader.
-- `frontend/chatbot/widget.css`: responsive, isolated design.
-- `frontend/chatbot/modules`: UI, controller, API, session storage and Markdown.
+- `frontend/chatbot/ui/widget.css`: responsive, isolated design.
+- `frontend/chatbot/js` and `frontend/chatbot/ui`: UI, controller, API, session storage and Markdown.
 - `backend/chatbot_server`: routes, orchestration, models, persistence, retrieval,
   provider clients, memory, guardrails and configuration.
-- `frontend/dashboard`: HTML, CSS, and scripts split by staff, analytics and knowledge.
+- `frontend/dashboard`: HTML, `styles/`, and scripts grouped into `core/`, `ui/`, and `features/`.
 - `backend/dashboard_server`: application composition, domain routes, staff,
   authentication, passwords, database and models. `service.py` remains a legacy facade.
 
@@ -80,3 +80,33 @@ Browser regressions: install Playwright (`npm install --no-save playwright` and
 `npx playwright install chromium`), then run `node tests/widget.cjs`. The test starts
 its own local fixture server and uses mock chat responses. Set `BROWSER_CHANNEL`
 to `msedge` or `chrome` to use an installed browser instead of bundled Chromium.
+
+## Folder map
+
+```text
+backend/
+  chatbot_server/
+    main.py                 # uvicorn entry point
+    api/                    # HTTP routes and request models
+    ai/                     # chat flow, providers and conversation memory
+    core/                   # configuration and guardrails
+    data/                   # database, retrieval and links
+  dashboard_server/
+    main.py                 # uvicorn entry point
+    api/                    # staff, analytics and knowledge routes
+    core/                   # configuration, authentication and passwords
+    data/                   # database, staff persistence and ingestion
+frontend/
+  chatbot/
+    widget.js               # public script-tag entry point
+    js/core/                # controller, API, session and Markdown
+    js/ui/                  # widget view
+    ui/                     # widget styles
+  dashboard/
+    styles/                 # dashboard styles
+    scripts/core/           # API and startup
+    scripts/ui/             # dashboard shell
+    scripts/features/       # staff, analytics and knowledge
+```
+
+`service.py` in each backend is a compatibility facade for existing imports.

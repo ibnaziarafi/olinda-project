@@ -18,6 +18,7 @@ backend/venv/.env.deploy
 Thumbs.db
 .vscode/
 .idea/
+.olinda-grouping-backup/
 
 # Temp uploads (runtime only)
 backend/temp_uploads/

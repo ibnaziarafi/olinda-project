@@ -1,8 +1,8 @@
 """Staff account persistence."""
 from datetime import datetime, timezone
 from fastapi import HTTPException
-from database import get_db, supabase_client, USING_SUPABASE, supabase_write_with_fallback
-from passwords import hash_password
+from data.database import get_db, supabase_client, USING_SUPABASE, supabase_write_with_fallback
+from core.passwords import hash_password
 
 def load_db_users() -> dict:
     if supabase_client:

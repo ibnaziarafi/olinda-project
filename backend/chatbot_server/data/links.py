@@ -1,7 +1,7 @@
 """Source links included with answers."""
 import re
 from typing import Optional
-from models import ActionLink
+from api.models import ActionLink
 
 def extract_action_links(chunks: list[str]) -> Optional[list[ActionLink]]:
     if not chunks:

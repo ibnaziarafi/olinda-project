@@ -21,7 +21,7 @@ from service import (
     set_db_user_password, remove_db_user, verify_password,
     LoginRequest, NewStaffRequest, ChangePasswordRequest, ResolveUnansweredRequest, IngestTextRequest
 )
-from ingestion import ingest_file, chunk_text, embed_chunks
+from data.ingestion import ingest_file, chunk_text, embed_chunks
 
 router = APIRouter()
 

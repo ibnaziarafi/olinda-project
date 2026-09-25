@@ -10,8 +10,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from contextlib import asynccontextmanager
-from database import init_db
-from routes import router
+from data.database import init_db
+from api.routes import router
 
 @asynccontextmanager
 async def lifespan(app):
