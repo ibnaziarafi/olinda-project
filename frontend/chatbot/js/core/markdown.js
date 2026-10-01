@@ -10,13 +10,8 @@ function inline(text, depth = 0) {
   for (const match of text.matchAll(token)) {
     html += escapeHtml(text.slice(offset, match.index));
     if (match[1] !== undefined) html += `<code>${escapeHtml(match[1])}</code>`;
-    else if (match[2] !== undefined) {
-      let url;
-      try { url = new URL(match[3]); } catch { /* leave unsupported links as text */ }
-      html += url && ['https:', 'http:'].includes(url.protocol)
-        ? `<a href="${escapeHtml(url.href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(match[2])}</a>`
-        : escapeHtml(match[0]);
-    } else if (match[4] !== undefined || match[5] !== undefined) {
+    else if (match[2] !== undefined) html += escapeHtml(match[2]);
+    else if (match[4] !== undefined || match[5] !== undefined) {
       html += `<strong>${inline(match[4] ?? match[5], depth + 1)}</strong>`;
     } else html += `<em>${inline(match[6], depth + 1)}</em>`;
     offset = match.index + match[0].length;

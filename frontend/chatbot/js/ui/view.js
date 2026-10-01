@@ -50,16 +50,6 @@ export function createView(shadow, config) {
       if (message.role === 'user') content.textContent = message.content;
       else content.innerHTML = parseMarkdown(message.content);
       article.append(content);
-      for (const link of message.action_links || []) {
-        try {
-          const url = new URL(link.url);
-          if (!['https:', 'http:'].includes(url.protocol)) continue;
-          const anchor = document.createElement('a');
-          anchor.href = url.href; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer';
-          anchor.className = 'source'; anchor.textContent = `${link.title || 'View source'} \u2197`;
-          article.append(anchor);
-        } catch { /* ignore malformed source links */ }
-      }
       if (message.role === 'assistant' && message.message_id) {
         const votes = document.createElement('div'); votes.className = 'feedback';
         const label = document.createElement('span'); label.textContent = 'Was this helpful?'; votes.append(label);

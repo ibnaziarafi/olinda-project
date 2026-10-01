@@ -11,10 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from service import (
     init_db, get_db, supabase_client, redact_pii, check_escalation,
-    retrieve_context, log_message, log_unanswered, extract_action_links,
+    retrieve_context, log_message, log_unanswered,
     summarize_conversation, build_llm_messages, generate_llm_response,
     CONFIDENCE_THRESHOLD, MAX_HISTORY_MESSAGES, MAX_RECENT_MESSAGES,
-    STUDENT_SERVICES_CONTACT, ChatRequest, ChatResponse
+    STUDENT_SERVICES_CONTACT, SYSTEM_PROMPT, ChatRequest, ChatResponse
 )
 
 init_db()
@@ -99,10 +99,7 @@ def chat(req: ChatRequest):
         print(f"[CHAT] Total response time: {time.perf_counter() - request_start:.2f}s")
         return ChatResponse(reply=reply, escalated=False, confidence=top_score, action_links=None)
 
-    # 4. Action links
-    action_links = extract_action_links(chunks)
-
-    # 5. Generate LLM response
+    # 4. Generate LLM response
     conversation_summary = req.conversation_summary.strip()
     if len(req.messages) > MAX_HISTORY_MESSAGES:
         summary_start = time.perf_counter()
@@ -114,7 +111,7 @@ def chat(req: ChatRequest):
 
     context = "\n\n---\n\n".join(chunks)
     summary_section = f"\n\nConversation Summary:\n{conversation_summary}" if conversation_summary else ""
-    system_content = f"You are Olinda, Hobart College's course advisory assistant.\n{summary_section}\n\nRetrieved Knowledge:\n{context}"
+    system_content = f"{SYSTEM_PROMPT}{summary_section}\n\nRetrieved Knowledge:\n{context}"
     llm_messages = build_llm_messages(system_content, req.messages, safe_message)
 
     llm_start = time.perf_counter()
@@ -131,7 +128,7 @@ def chat(req: ChatRequest):
         reply=reply,
         escalated=False,
         confidence=top_score,
-        action_links=action_links,
+        action_links=None,
         conversation_summary=conversation_summary or None,
     )
 
