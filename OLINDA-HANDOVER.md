@@ -180,3 +180,13 @@ Offline tests use temporary data and mocked providers; they are not live securit
 Only perform submissions, deployments, live SQL changes and external testing after your approval. We will proceed step by step.
 
 Portal test page fix: `frontend/dashboard/test_website.html` loads the widget from its separate `https://olinda.rafistacks.dev/widget.js` host. Public widget assets support cross-origin loading; chat API access remains restricted to the college, demo and portal origins. For existing manually configured Render services, add the portal origin to the chat backend FRONTEND_ORIGINS setting during an approved deployment.
+
+## Supabase advisor warnings: table access fix
+
+Once both services use server-only service_role/secret keys, review `backend/dashboard_server/fix_database_access.sql` in the correct Supabase project. It enables RLS on staff, knowledge, session, message and queue tables; revokes direct public/anon/authenticated access; explicitly preserves service_role read/write access; and fixes the search path/access grants for actual match_chunks function overloads. Existing records, logging, student access and application encryption settings are preserved. Other direct Supabase integrations using public keys will lose access to these tables, so review any such integrations first.
+
+After an approved SQL execution, confirm the five returned rls_enabled values are true, refresh Security Advisor, and test staff login, a known-question search, chat logging and queue access. No public RLS policy is needed for this backend-only access model. The vector-extension-in-public warning remains for a separately reviewed extension/search migration; this script does not relocate it. The SQL has been prepared locally and has not been executed or verified against live PostgreSQL by Codex.
+
+## Refreshing the widget tab
+
+The widget now uses browser sessionStorage to retain its session ID, recent messages, context and summary across refreshes in the same tab. It keeps up to 40 displayed messages and 10 context messages. Start a new conversation resets this browser state without deleting database chat logs. Storage is scoped to the page origin/tab: the college page, portal demo and widget demo do not share chat history. If browser settings block storage, chatting still works but refresh persistence is unavailable. No encryption key, backend setting or SQL change is required. Deploy the updated widget frontend to activate this local change. Browser session restoration may also restore sessionStorage when a closed tab is reopened, depending on the browser.

@@ -2,6 +2,7 @@
 import asyncio
 import collections
 import json
+import logging
 import os
 import re
 import threading
@@ -20,6 +21,7 @@ PRODUCTION = os.getenv("APP_ENV", "production") == "production"
 ORIGINS = [v.strip() for v in os.getenv("FRONTEND_ORIGINS", "" if PRODUCTION else
     "http://localhost:3000,http://localhost:5173,http://localhost:5500,http://127.0.0.1:5500").split(",") if v.strip()]
 UNANSWERED_LOG_ENABLED = os.getenv("UNANSWERED_LOG_ENABLED", "true").lower() == "true"
+logger = logging.getLogger("olinda.traffic")
 
 
 def validate_config(chat=False):
@@ -83,9 +85,18 @@ class RateLimiter:
         key = "olinda:rate:" + hashlib.sha256(key.encode()).hexdigest() + f":{bucket}"
         if self.supabase:
             expires = datetime.fromtimestamp((bucket + 2) * window_seconds, timezone.utc).isoformat()
-            result = await run_in_threadpool(self.supabase.rpc("consume_api_quota", {
-                "p_bucket_key": key, "p_request_limit": limit, "p_expires_at": expires,
-            }).execute)
+            try:
+                result = await run_in_threadpool(self.supabase.rpc("consume_api_quota", {
+                    "p_bucket_key": key, "p_request_limit": limit, "p_expires_at": expires,
+                }).execute)
+            except Exception as error:
+                # Never log the exception message/traceback: provider errors can
+                # include credentials or request data. Codes identify common causes.
+                code = str(getattr(error, "code", "unknown"))
+                if not re.fullmatch(r"[A-Z0-9]{1,16}", code):
+                    code = "unknown"
+                logger.error("Supabase quota check failed: type=%s code=%s", type(error).__name__, code)
+                raise
             return result.data is True
         with self.lock:
             now = time.monotonic()

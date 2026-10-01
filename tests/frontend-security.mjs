@@ -30,3 +30,40 @@ try {
   globalThis.fetch = originalFetch;
 }
 console.log('Frontend usage-limit check passed: HTTP 429 is preserved for the user-facing message.');
+
+const sessionSource = await fs.readFile(new URL('../frontend/chatbot/js/core/session.js', import.meta.url), 'utf8');
+const { createSession } = await import(`data:text/javascript;base64,${Buffer.from(sessionSource).toString('base64')}`);
+const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+const stored = new Map();
+try {
+  Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: {
+    getItem: key => stored.get(key) ?? null,
+    setItem: (key, value) => stored.set(key, value),
+  } });
+  const first = createSession('test-chat');
+  first.state.history.push({ role: 'user', content: 'Which courses are available?' });
+  first.state.context.push({ role: 'user', content: 'Which courses are available?' });
+  first.state.summary = 'Discussing college courses';
+  first.save();
+  const refreshed = createSession('test-chat');
+  assert.equal(refreshed.state.id, first.state.id);
+  assert.deepEqual(refreshed.state.history, first.state.history);
+  assert.deepEqual(refreshed.state.context, first.state.context);
+  assert.equal(refreshed.state.summary, first.state.summary);
+  refreshed.reset();
+  assert.notEqual(refreshed.state.id, first.state.id);
+  assert.deepEqual(createSession('test-chat').state.history, []);
+  stored.set('broken-chat', '{invalid JSON');
+  assert.deepEqual(createSession('broken-chat').state.history, []);
+  stored.set('invalid-chat', JSON.stringify({ id: 'valid-id', history: 'invalid' }));
+  assert.deepEqual(createSession('invalid-chat').state.history, []);
+  Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, get() { throw new Error('Storage blocked'); } });
+  const blocked = createSession('blocked-chat');
+  blocked.state.history.push({ role: 'user', content: 'Courses?' });
+  assert.doesNotThrow(() => blocked.save());
+  assert.equal(blocked.state.history.length, 1);
+} finally {
+  if (originalStorage) Object.defineProperty(globalThis, 'sessionStorage', originalStorage);
+  else delete globalThis.sessionStorage;
+}
+console.log('Frontend session checks passed: refresh restores chat, reset clears it, corrupt/blocked storage is tolerated.');

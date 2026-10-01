@@ -189,6 +189,19 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         handler.assert_not_called()
 
+    def test_quota_failure_logs_code_without_sensitive_exception_text(self):
+        error = RuntimeError("private API key and student question")
+        error.code = "42501"
+        limiter = security.RateLimiter()
+        limiter.supabase = MagicMock()
+        limiter.supabase.rpc.return_value.execute.side_effect = error
+        with self.assertLogs("olinda.traffic", level="ERROR") as logs:
+            with self.assertRaises(RuntimeError):
+                asyncio.run(limiter.allowed("chat:test", 15))
+        self.assertIn("42501", logs.output[0])
+        self.assertNotIn("private API key", logs.output[0])
+        self.assertNotIn("student question", logs.output[0])
+
     def test_supabase_counters_are_shared_between_instances(self):
         # Simulates the atomic RPC store, not a live PostgreSQL test.
         counts = {}
