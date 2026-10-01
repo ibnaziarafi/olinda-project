@@ -71,7 +71,7 @@ Shared counters are necessary so restarting the server or adding another instanc
 | Build command | `pip install -r requirements.txt` | Same |
 | Render start command | `uvicorn main:app --host 0.0.0.0 --port $PORT` | Same |
 | `APP_ENV` | `production` | `production` |
-| `FRONTEND_ORIGINS` | `https://hobartcollege.education.tas.edu.au,https://olinda.rafistacks.dev` | `https://portal-olinda.rafistacks.dev` |
+| `FRONTEND_ORIGINS` | `https://hobartcollege.education.tas.edu.au,https://olinda.rafistacks.dev,https://portal-olinda.rafistacks.dev` | `https://portal-olinda.rafistacks.dev` |
 | `SUPABASE_URL` | Your HTTPS project URL | Same project URL |
 | `SUPABASE_KEY` | Your private authorized backend credential | Your private authorized backend credential |
 | `GEMINI_API_KEY` | Your private Gemini key | Private Gemini key for adding knowledge |
@@ -178,3 +178,5 @@ Offline tests use temporary data and mocked providers; they are not live securit
 | PII / privacy / cookies / applicable regulations | Basic redaction and unencrypted application chat logs; approved notices, data regions/provider handling and privacy review remain later work. |
 
 Only perform submissions, deployments, live SQL changes and external testing after your approval. We will proceed step by step.
+
+Portal test page fix: `frontend/dashboard/test_website.html` loads the widget from its separate `https://olinda.rafistacks.dev/widget.js` host. Public widget assets support cross-origin loading; chat API access remains restricted to the college, demo and portal origins. For existing manually configured Render services, add the portal origin to the chat backend FRONTEND_ORIGINS setting during an approved deployment.

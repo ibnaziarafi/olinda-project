@@ -10,7 +10,7 @@ services:
       - key: APP_ENV
         value: production
       - key: FRONTEND_ORIGINS
-        value: https://hobartcollege.education.tas.edu.au,https://olinda.rafistacks.dev
+        value: https://hobartcollege.education.tas.edu.au,https://olinda.rafistacks.dev,https://portal-olinda.rafistacks.dev
       - key: UNANSWERED_LOG_ENABLED
         value: "true"
       - key: CHAT_REQUESTS_PER_MINUTE

@@ -22,6 +22,10 @@
       "destination": "/dashboard/test_website.html"
     },
     {
+      "source": "/test_website.html",
+      "destination": "/dashboard/test_website.html"
+    },
+    {
       "source": "/dashboard",
       "destination": "/dashboard/dashboard.html"
     },
@@ -76,7 +80,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://olinda-ai-backend-chatbot.onrender.com https://olinda-ai-backend-dashboard.onrender.com; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+          "value": "default-src 'self'; script-src 'self' https://olinda.rafistacks.dev; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://olinda.rafistacks.dev; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://olinda.rafistacks.dev; connect-src 'self' https://olinda-ai-backend-chatbot.onrender.com https://olinda-ai-backend-dashboard.onrender.com; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
         }
       ]
     },
@@ -85,7 +89,7 @@
       "headers": [
         {
           "key": "Access-Control-Allow-Origin",
-          "value": "https://hobartcollege.education.tas.edu.au"
+          "value": "*"
         }
       ]
     },
@@ -94,7 +98,7 @@
       "headers": [
         {
           "key": "Access-Control-Allow-Origin",
-          "value": "https://hobartcollege.education.tas.edu.au"
+          "value": "*"
         }
       ]
     },
@@ -103,7 +107,7 @@
       "headers": [
         {
           "key": "Access-Control-Allow-Origin",
-          "value": "https://hobartcollege.education.tas.edu.au"
+          "value": "*"
         }
       ]
     },
@@ -112,7 +116,7 @@
       "headers": [
         {
           "key": "Access-Control-Allow-Origin",
-          "value": "https://hobartcollege.education.tas.edu.au"
+          "value": "*"
         }
       ]
     }
