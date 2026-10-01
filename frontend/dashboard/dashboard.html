@@ -14,7 +14,7 @@
 
 <!-- LOGIN OVERLAY -->
 <div id="login-overlay">
-  <form class="login-card" id="login-form" onsubmit="doLogin(event)">
+  <form class="login-card" id="login-form" data-submit="doLogin">
     <div class="login-logo">O</div>
     <h1>Staff Sign In</h1>
     <p class="sub">Hobart College · Olinda Management Portal</p>
@@ -45,16 +45,16 @@
       <span id="role-badge" style="font-size:0.68rem; background:var(--gold); color:var(--navy); padding:1px 7px; border-radius:999px; font-weight:700;">Staff</span>
     </span>
     <a href="/test_website.html" style="color: var(--blue-100); text-decoration:none; font-size:0.88rem; font-weight:500;">← Website</a>
-    <button class="logout-btn" onclick="logout()">Log out</button>
+    <button class="logout-btn" data-action="logout">Log out</button>
   </div>
 </header>
 
 <div class="tabs-bar">
-  <button class="tab-btn active" onclick="switchTab('analytics')">📊 Analytics Overview</button>
-  <button class="tab-btn" onclick="switchTab('unanswered')">❓ Unanswered Queue <span class="tab-badge" id="badge-unanswered">0</span></button>
-  <button class="tab-btn" onclick="switchTab('knowledge')">📚 Knowledge Base Manager</button>
-  <button class="tab-btn" id="tab-btn-staff" onclick="switchTab('staff')" style="display:none;">👥 Manage Staff</button>
-  <button class="tab-btn" onclick="switchTab('account')">🔑 My Account</button>
+  <button class="tab-btn active" data-tab="analytics">📊 Analytics Overview</button>
+  <button class="tab-btn" data-tab="unanswered">❓ Unanswered Queue <span class="tab-badge" id="badge-unanswered">0</span></button>
+  <button class="tab-btn" data-tab="knowledge">📚 Knowledge Base Manager</button>
+  <button class="tab-btn" id="tab-btn-staff" data-tab="staff" style="display:none;">👥 Manage Staff</button>
+  <button class="tab-btn" data-tab="account">🔑 My Account</button>
 </div>
 
 <main>
@@ -120,12 +120,12 @@
       <div class="section-title">Add New Knowledge Document (PDF or Excel)</div>
       <div class="section-desc">Upload course guides, TASC standards, or timetables (.pdf, .xlsx, .xls, .csv). Olinda will automatically parse, chunk, embed, and store them.</div>
 
-      <form id="file-upload-form" onsubmit="handleFileUpload(event)">
-        <div class="upload-box" onclick="document.getElementById('file-input').click()">
+      <form id="file-upload-form" data-submit="handleFileUpload">
+        <div class="upload-box" data-action="select-file">
           <div class="upload-icon">📄</div>
           <div style="font-weight:600; margin-bottom:4px;">Click or Drag PDF / Excel / CSV file here</div>
-          <div style="font-size:0.8rem; color: var(--ink-soft);" id="file-selected-name">Supports .pdf, .xlsx, .xls, .csv</div>
-          <input type="file" id="file-input" accept=".pdf,.xlsx,.xls,.csv" style="display:none;" onchange="updateFileNameDisplay()" />
+          <div style="font-size:0.8rem; color: var(--ink-soft);" id="file-selected-name">Supports .pdf, .xlsx, .csv, .txt</div>
+          <input type="file" id="file-input" accept=".pdf,.xlsx,.csv,.txt" style="display:none;" data-action="file-change" />
         </div>
         
         <div style="display:flex; gap:12px; align-items:center;">
@@ -144,7 +144,7 @@
       <div class="section-title">Manual Text FAQ Ingestion</div>
       <div class="section-desc">Quickly paste a new rule, course requirement, or announcement to add it directly to Olinda's brain.</div>
 
-      <form onsubmit="handleTextIngest(event)">
+      <form data-submit="handleTextIngest">
         <textarea id="manual-text" rows="4" placeholder="Enter rule or course info here... (e.g. Mathematics Methods Foundation Level 3 requires Year 10 Maths 5.3 standard.)" required></textarea>
         <button type="submit" class="btn btn-primary">Add to Knowledge Base</button>
       </form>
@@ -180,7 +180,7 @@
       <div class="section-title">Add a Staff Member</div>
       <div class="section-desc">Create a login for another Hobart College staff member. Display name is recorded against answered questions and added knowledge items.</div>
 
-      <form onsubmit="addStaff(event)">
+      <form data-submit="addStaff">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
           <div>
             <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:6px;">Display Name</label>
@@ -193,13 +193,13 @@
         </div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
           <div>
-            <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:6px;">Temporary Password (min 6 characters)</label>
-            <input type="text" id="new-password" placeholder="They can change it later" required>
+            <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:6px;">Temporary Password (min 12 characters)</label>
+            <input type="password" id="new-password" minlength="12" autocomplete="new-password" placeholder="They can change it later" required>
           </div>
           <div>
             <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:6px;">Role</label>
             <select id="new-role">
-              <option value="user" selected>Normal user (can only change own password)</option>
+              <option value="user" selected>Staff viewer (read access and own password)</option>
               <option value="admin">Admin (can manage staff)</option>
             </select>
           </div>
@@ -249,11 +249,11 @@
       <div id="account-builtin-note" style="display:none; background:#FEF3C7; color:#92400E; padding:12px 14px; border-radius:8px; font-size:0.86rem;">
         This is a built-in account configured on the server (STAFF_USERS).
       </div>
-      <form id="change-pw-form" onsubmit="changePassword(event)">
+      <form id="change-pw-form" data-submit="changePassword">
         <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:6px;">Current Password</label>
         <input type="password" id="cur-password" autocomplete="current-password" required>
-        <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:6px;">New Password (min 6 characters)</label>
-        <input type="password" id="new-my-password" autocomplete="new-password" required>
+        <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:6px;">New Password (min 12 characters)</label>
+        <input type="password" id="new-my-password" minlength="12" autocomplete="new-password" required>
         <button type="submit" class="btn btn-primary" id="change-pw-btn">Update Password</button>
       </form>
     </div>

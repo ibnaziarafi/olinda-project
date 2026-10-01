@@ -18,11 +18,19 @@ export function createView(shadow, config) {
       <div class="messages" role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions"></div>
       <button class="new-answer" type="button" hidden>New answer</button>
       <form class="composer"><label class="sr-only" for="question">Your question</label><input id="question" maxlength="4000" autocomplete="off" placeholder="Ask about your next step\u2026"><button type="submit" class="send" aria-label="Send message">\u2191</button></form>
-      <footer>AI can make mistakes. Confirm important details with your college.</footer>
+      <footer>AI can make mistakes. Please avoid sharing personal or sensitive information.</footer>
     </section>`;
   root.querySelectorAll('[data-name]').forEach(el => { el.textContent = config.name; });
   root.querySelector('[data-college]').textContent = config.college;
   root.querySelector('.launcher').setAttribute('aria-label', `Open ${config.name} chat assistant`);
+  if (config.privacyUrl) {
+    const url = new URL(config.privacyUrl, location.href);
+    if (url.protocol === 'https:') {
+      const link = document.createElement('a'); link.href = url.href;
+      link.textContent = ' Privacy notice'; link.target = '_blank'; link.rel = 'noopener noreferrer';
+      root.querySelector('footer').append(link);
+    }
+  }
   shadow.append(root);
   const find = selector => root.querySelector(selector);
   const scrolling = createChatScroll(find('.messages'), find('.new-answer'));

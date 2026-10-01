@@ -17,11 +17,13 @@ import uuid
 
 import pdfplumber
 import openpyxl
-from dotenv import load_dotenv
 from google import genai
 from google.genai import types as genai_types
+if __package__:
+    from .security import redact_pii, validate_config
+else:
+    from security import redact_pii, validate_config
 
-load_dotenv()
 
 DB_PATH = os.getenv("OLINDA_DB_PATH", "olinda.db")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "gemini-embedding-001")
@@ -32,16 +34,18 @@ EMBED_RETRIES = 3
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""),
+    http_options=genai_types.HttpOptions(timeout=15000))
 
 supabase_client = None
+USING_SUPABASE = False
 if SUPABASE_URL and SUPABASE_KEY:
     try:
         from supabase import create_client
         supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
         print("Connected to Supabase pgvector instance.")
     except Exception as e:
-        raise RuntimeError(f"Supabase is configured but could not be initialized: {e}") from e
+        raise RuntimeError("Persistent storage operation failed") from None
 
     USING_SUPABASE = supabase_client is not None
 
@@ -50,7 +54,7 @@ def embed_chunks(chunks: list[str]) -> list[list[float]]:
     """Embed chunks in small batches (avoids oversized requests / rate limits)."""
     all_embeddings = []
     for i in range(0, len(chunks), BATCH_SIZE):
-        batch = chunks[i : i + BATCH_SIZE]
+        batch = [redact_pii(chunk) for chunk in chunks[i : i + BATCH_SIZE]]
         for attempt in range(EMBED_RETRIES):
             try:
                 result = client.models.embed_content(
@@ -66,7 +70,7 @@ def embed_chunks(chunks: list[str]) -> list[list[float]]:
                 if attempt == EMBED_RETRIES - 1:
                     raise
                 delay = 2 ** attempt
-                print(f"Embedding batch {i // BATCH_SIZE + 1} failed; retrying in {delay}s: {error}")
+                print(f"Embedding batch {i // BATCH_SIZE + 1} failed; retrying in {delay}s")
                 time.sleep(delay)
         all_embeddings.extend([e.values for e in result.embeddings])
         print(f"  embedded {min(i + BATCH_SIZE, len(chunks))}/{len(chunks)} chunks")
@@ -77,8 +81,12 @@ def embed_chunks(chunks: list[str]) -> list[list[float]]:
 def extract_pdf_text(pdf_path: str) -> str:
     text = ""
     with pdfplumber.open(pdf_path) as pdf:
+        if len(pdf.pages) > 100:
+            raise ValueError("PDF exceeds 100 pages")
         for page in pdf.pages:
             text += (page.extract_text() or "") + "\n"
+            if len(text) > 500000:
+                raise ValueError("Extracted document too large")
     return text
 
 
@@ -98,8 +106,10 @@ def extract_excel_or_csv_text(file_path: str) -> str:
                 formatted_row = [f"{headers[i]}: {val.strip()}" for i, val in enumerate(row) if i < len(headers) and val.strip()]
                 if formatted_row:
                     text_lines.append(" | ".join(formatted_row))
+                if len(text_lines) > 10000:
+                    raise ValueError("CSV exceeds 10000 rows")
     elif ext in [".xlsx", ".xls"]:
-        wb = openpyxl.load_workbook(file_path, data_only=True)
+        wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True, keep_links=False)
         for sheet in wb.worksheets:
             headers = None
             for row in sheet.iter_rows(values_only=True):
@@ -112,10 +122,19 @@ def extract_excel_or_csv_text(file_path: str) -> str:
                 formatted_row = [f"{headers[i]}: {val}" for i, val in enumerate(str_row) if i < len(headers) and val]
                 if formatted_row:
                     text_lines.append(f"Sheet '{sheet.title}': " + " | ".join(formatted_row))
+                if len(text_lines) > 10000:
+                    wb.close()
+                    raise ValueError("Workbook exceeds 10000 rows")
+        wb.close()
     return "\n".join(text_lines)
 
 
 def chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> list[str]:
+    text = redact_pii(text)
+    if len(text) > 500000:
+        raise ValueError("Extracted document exceeds 500000 characters")
+    if not 0 <= overlap < chunk_size:
+        raise ValueError("Invalid chunk overlap")
     words = text.split()
     chunks = []
     start = 0
@@ -154,6 +173,7 @@ def ensure_sqlite_table(conn: sqlite3.Connection):
 
 
 def ingest_file(file_path: str, subject_code=None, tasc_level=None, career_field=None, doc_type="course_guide", added_by=None):
+    validate_config()
     print(f"Reading {file_path}...")
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".pdf":
@@ -218,8 +238,9 @@ def ingest_file(file_path: str, subject_code=None, tasc_level=None, career_field
                             print(f"Supabase course_chunks missing '{col}'; inserting without it.")
                             break
                     if not dropped:
-                        print(f"Supabase insert warning: {e}")
-                        break
+                        raise RuntimeError("Knowledge could not be persisted") from e
+            else:
+                raise RuntimeError("Knowledge schema requires migration")
 
     if conn:
         conn.commit()

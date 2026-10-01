@@ -30,8 +30,9 @@ if __name__ == "__main__":
     for name, directory, port in SERVICES:
         env = os.environ.copy()
         env["PORT"] = port
+        env.setdefault("APP_ENV", "development")
         process = subprocess.Popen(
-            [sys.executable, "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", port],
+            [sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", port],
             cwd=directory,
             env=env,
         )

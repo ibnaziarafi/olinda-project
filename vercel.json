@@ -3,16 +3,117 @@
   "name": "olinda-frontend",
   "outputDirectory": "frontend",
   "rewrites": [
-    { "source": "/", "destination": "/test_website.html" },
-    { "source": "/index.html", "destination": "/test_website.html" },
-    { "source": "/dashboard", "destination": "/dashboard.html" },
-    { "source": "/widget.js", "destination": "/widget.js" }
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "portal-olinda.rafistacks.dev"
+        }
+      ],
+      "destination": "/dashboard/dashboard.html"
+    },
+    {
+      "source": "/",
+      "destination": "/dashboard/test_website.html"
+    },
+    {
+      "source": "/index.html",
+      "destination": "/dashboard/test_website.html"
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/dashboard/dashboard.html"
+    },
+    {
+      "source": "/widget.js",
+      "destination": "/chatbot/widget.js"
+    },
+    {
+      "source": "/js/:path*",
+      "destination": "/chatbot/js/:path*"
+    },
+    {
+      "source": "/ui/:path*",
+      "destination": "/chatbot/ui/:path*"
+    },
+    {
+      "source": "/assets/:path*",
+      "destination": "/chatbot/assets/:path*"
+    },
+    {
+      "source": "/dashboard.html",
+      "destination": "/dashboard/dashboard.html"
+    },
+    {
+      "source": "/scripts/:path*",
+      "destination": "/dashboard/scripts/:path*"
+    },
+    {
+      "source": "/styles/:path*",
+      "destination": "/dashboard/styles/:path*"
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://olinda-ai-backend-chatbot.onrender.com https://olinda-ai-backend-dashboard.onrender.com; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+        }
+      ]
+    },
+    {
+      "source": "/widget.js",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "https://hobartcollege.education.tas.edu.au"
+        }
+      ]
+    },
+    {
+      "source": "/chatbot/:path*",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "https://hobartcollege.education.tas.edu.au"
+        }
+      ]
+    },
+    {
+      "source": "/js/:path*",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "https://hobartcollege.education.tas.edu.au"
+        }
+      ]
+    },
+    {
+      "source": "/ui/:path*",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "https://hobartcollege.education.tas.edu.au"
+        }
       ]
     }
   ]

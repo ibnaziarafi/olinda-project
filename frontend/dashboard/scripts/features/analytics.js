@@ -43,12 +43,13 @@ async function loadAnalytics() {
             ${isReviewed ? `<span style="color: var(--ink-soft); font-size:0.85rem;">Answer added to Knowledge Base</span>
                 ${item.resolved_by ? `<div class="attribution">Answered by <strong>${escapeHtml(item.resolved_by)}</strong></div>` : ''}` : `
               <div style="display:flex; flex-direction:column; gap:6px;">
-                <textarea id="answer-${item.id}" rows="2" placeholder="Type official answer..." style="margin-bottom:0; font-size:0.85rem;"></textarea>
-                <button class="btn btn-primary" style="padding:6px 12px; font-size:0.8rem;" onclick="resolveQuestion('${item.id}')">Save & Update Knowledge Base</button>
+                <textarea id="answer-${escapeHtml(item.id)}" rows="2" placeholder="Type official answer..." style="margin-bottom:0; font-size:0.85rem;"></textarea>
+                <button class="btn btn-primary" style="padding:6px 12px; font-size:0.8rem;" data-action="resolve-question">Save & Update Knowledge Base</button>
               </div>
             `}
           </td>
         `;
+        tr.querySelector('[data-action="resolve-question"]')?.addEventListener('click', () => resolveQuestion(item.id));
         tbody.appendChild(tr);
       });
     } catch (e) {

@@ -10,9 +10,9 @@ export async function mount(config) {
   const loaded = new Promise((resolve, reject) => { stylesheet.onload = resolve; stylesheet.onerror = () => reject(new Error('Widget stylesheet could not load')); });
   shadow.append(stylesheet); document.body.append(host);
   try { await loaded; } catch (error) { host.remove(); throw error; }
-  const api = createApi(config.backend);
   const session = createSession(`olinda:${config.backend}:${config.college}`);
   const view = createView(shadow, config);
+  const api = createApi(config.backend);
   let pending = null;
   let generation = 0;
   let destroyed = false;
@@ -55,7 +55,11 @@ export async function mount(config) {
     } catch (error) {
       if (requestGeneration !== generation || destroyed) return;
       view.busy(false);
-      view.message({ role: 'assistant', content: error.name === 'AbortError' ? 'This is taking longer than usual. Please try again in a moment.' : 'I couldn\u2019t connect just now. Please try again or contact Student Services.' }, vote);
+      const failure = error.status === 429
+        ? 'The chatbot has reached a usage limit. Please try later or contact Student Services.'
+        : error.name === 'AbortError' ? 'This is taking longer than usual. Please try again in a moment.'
+        : 'I couldn\u2019t connect just now. Please try again or contact Student Services.';
+      view.message({ role: 'assistant', content: failure }, vote);
     } finally {
       if (requestGeneration === generation && !destroyed) { pending = null; view.busy(false); }
     }

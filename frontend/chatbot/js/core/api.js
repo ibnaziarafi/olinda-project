@@ -5,15 +5,21 @@ export function createApi(base) {
     const abort = () => controller.abort();
     if (signal?.aborted) controller.abort();
     signal?.addEventListener('abort', abort, { once: true });
-    const timer = setTimeout(abort, 45000);
+    let timer;
     try {
+      timer = setTimeout(abort, 45000);
+      const headers = body ? { 'Content-Type': 'application/json' } : {};
       const response = await fetch(`${base}${path}`, {
         method: body ? 'POST' : 'GET',
-        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        headers,
         body: body ? JSON.stringify(body) : undefined,
         credentials: 'omit', signal: controller.signal,
       });
-      if (!response.ok) throw new Error(`Request failed (${response.status})`);
+      if (!response.ok) {
+        const error = new Error(`Request failed (${response.status})`);
+        error.status = response.status;
+        throw error;
+      }
       return await response.json();
     } finally {
       clearTimeout(timer);

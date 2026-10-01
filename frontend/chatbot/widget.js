@@ -10,7 +10,12 @@
     name: script.dataset.name || 'Olinda',
     college: script.dataset.college || 'Hobart College',
     autoOpen: script.dataset.autoOpen === 'true',
+    privacyUrl: script.dataset.privacyUrl || '',
   };
+  const backendUrl = new URL(config.backend, location.href);
+  if (backendUrl.protocol !== 'https:' && !(local && ['localhost', '127.0.0.1'].includes(backendUrl.hostname))) {
+    throw new Error('Olinda backend must use HTTPS');
+  }
   const entry = new URL('./js/core/widget.js', script.src).href;
   async function start() {
     try {

@@ -24,9 +24,10 @@ async function loadChunks() {
           <td style="font-size:0.82rem;">${addedBy}</td>
           <td>${dateStr}</td>
           <td>
-            <button class="btn btn-danger" style="padding:4px 10px; font-size:0.78rem;" onclick="deleteChunk('${chunk.chunk_id}')">Delete</button>
+            <button class="btn btn-danger" style="padding:4px 10px; font-size:0.78rem;" data-action="delete-chunk">Delete</button>
           </td>
         `;
+        tr.querySelector('[data-action="delete-chunk"]').addEventListener('click', () => deleteChunk(chunk.chunk_id));
         tbody.appendChild(tr);
       });
     } catch (e) {
@@ -37,7 +38,7 @@ async function loadChunks() {
   async function deleteChunk(chunkId) {
     if (!confirm('Are you sure you want to delete this knowledge chunk?')) return;
     try {
-      const res = await authFetch(`${API_BASE}/api/chunks/${chunkId}`, { method: 'DELETE' });
+      const res = await authFetch(`${API_BASE}/api/chunks/${encodeURIComponent(chunkId)}`, { method: 'DELETE' });
       if (res.ok) {
         showToast('Knowledge chunk deleted');
         loadChunks();
@@ -85,7 +86,7 @@ async function loadChunks() {
       if (res.ok) {
         showToast(`Ingested ${data.chunks_added} chunks from ${data.filename} (added by ${data.added_by || getStaffName()})`);
         fileInput.value = '';
-        document.getElementById('file-selected-name').textContent = 'Supports .pdf, .xlsx, .xls, .csv';
+        document.getElementById('file-selected-name').textContent = 'Supports .pdf, .xlsx, .csv, .txt';
         loadChunks();
         loadAnalytics();
       } else {

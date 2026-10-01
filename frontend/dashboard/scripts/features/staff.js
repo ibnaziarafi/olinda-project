@@ -20,7 +20,7 @@ async function loadStaff() {
           : '<span class="tag tag-info">User</span>';
         let action;
         if (u.removable) {
-          action = `<button class="btn btn-danger" style="padding:4px 10px; font-size:0.78rem;" onclick="removeStaff('${escapeHtml(u.username)}', '${escapeHtml(u.name)}')">Remove</button>`;
+          action = `<button class="btn btn-danger" style="padding:4px 10px; font-size:0.78rem;" data-action="remove-staff">Remove</button>`;
         } else {
           action = '<span style="color: var(--ink-soft); font-size:0.82rem;">—</span>';
         }
@@ -31,6 +31,7 @@ async function loadStaff() {
           <td>${typeTag}</td>
           <td>${action}</td>
         `;
+        tr.querySelector('[data-action="remove-staff"]')?.addEventListener('click', () => removeStaff(u.username, u.name));
         tbody.appendChild(tr);
       });
     } catch (e) {

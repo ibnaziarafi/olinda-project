@@ -65,7 +65,7 @@ function showLoginError(msg) {
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
-      if ((btn.getAttribute('onclick') || '').includes(`'${tabId}'`)) btn.classList.add('active');
+      if (btn.dataset.tab === tabId) btn.classList.add('active');
     });
     document.getElementById(`tab-${tabId}`).classList.add('active');
 

@@ -1,8 +1,10 @@
-fastapi
-uvicorn[standard]
-google-genai
-groq
-numpy
-python-dotenv
-pydantic
-supabase
+# Direct dependency versions verified by the offline regression suite.
+fastapi==0.142.2
+uvicorn==0.54.0
+google-genai==2.26.0
+groq==1.7.0
+numpy==2.5.3
+python-dotenv==1.2.3
+pydantic==2.13.5
+supabase==2.31.0
+httpx==0.28.1
