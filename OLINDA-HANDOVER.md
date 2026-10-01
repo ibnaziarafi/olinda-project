@@ -57,9 +57,9 @@ No spending budget or paid upgrade has been configured by this work.
 
 Your developer must review and test:
 
-`backend/dashboard_server/supabase_security_migration.sql`
+`backend/dashboard_server/setup_request_limits.sql`
 
-It adds the atomic shared quota function/counter table and restricts public database access. Review existing integrations and back up relevant data first. It is not automatically run by the backend. Test in staging after approval; apply to production only after separate approval.
+For this simple stage, it adds only the shared quota function/counter table and restricts access to those new counters. It does not change existing chat, knowledge or staff data/permissions. The broader `supabase_security_migration.sql` is a separate future hardening step. Review the SQL and correct project first; it is not automatically run by the backend. Test in staging after approval; apply to production only after separate approval. Both services must use server-only service_role or compatible secret backend credentials, not anon/publishable keys.
 
 Shared counters are necessary so restarting the server or adding another instance does not reset the production daily allowance. No new database service is needed.
 
