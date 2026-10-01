@@ -35,11 +35,17 @@ def validate_config(chat=False):
         if not os.getenv("SUPABASE_KEY") or not os.getenv("SUPABASE_URL", "").startswith("https://"):
             raise RuntimeError("Production requires HTTPS Supabase; local SQLite is development only")
         import ipaddress
-        proxies = os.getenv("FORWARDED_ALLOW_IPS", "")
+        proxies = os.getenv("FORWARDED_ALLOW_IPS", "").strip()
         if not proxies:
             raise RuntimeError("Configure verified reverse proxy addresses in FORWARDED_ALLOW_IPS")
-        for proxy in proxies.split(","):
-            ipaddress.ip_network(proxy.strip())  # Reject wildcard proxy trust.
+        if proxies == "*":
+            # Render's Python runtime supplies this documented default.
+            # Other hosts must configure their specific trusted proxies.
+            if os.getenv("RENDER") != "true":
+                raise RuntimeError("Wildcard proxy trust is supported only on Render")
+        else:
+            for proxy in proxies.split(","):
+                ipaddress.ip_network(proxy.strip())
     if not 1 <= int(os.getenv("CHAT_REQUESTS_PER_MINUTE", "15")) <= 1000:
         raise RuntimeError("CHAT_REQUESTS_PER_MINUTE must be between 1 and 1000")
     if not 0 <= int(os.getenv("CHAT_DAILY_REQUEST_LIMIT", "200")) <= 100000:

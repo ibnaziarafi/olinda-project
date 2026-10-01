@@ -10,6 +10,8 @@ Staff username/password login and administrator authorization remain. Session si
 
 Required before approved deployment: protect/rotate exposed provider keys, configure provider spending controls, review/test the supplied Supabase migration, configure the two independent server folders, verify trusted proxy/client IP handling and test the queue/limits in staging. No extra service purchase is needed for counters or chat access.
 
-The latest simplified suite has 24 passing offline backend/deployment tests, plus frontend security/429 checks, Python compilation and diff whitespace checks. Tests use temporary data and mocked providers/storage. Live database concurrency, actual provider behavior and deployed configuration remain unverified.
+The latest simplified suite has 25 passing offline backend/deployment tests, plus frontend security/429 checks, Python compilation and diff whitespace checks. Tests use temporary data and mocked providers/storage. Live database concurrency, actual provider behavior and deployed configuration remain unverified.
 
 No submission, live migration, deployment, penetration scan or load test has been performed. Original high-assurance client requirements are deferred, not certified complete. The daily request limit is not a dollar cap and cannot limit direct provider use of a stolen key. Public callers can consume the allowance; shared college-network IP limits need usability testing.
+
+Render startup fix: both server copies accept the documented `FORWARDED_ALLOW_IPS=*` default when `RENDER=true`. The hosting blueprint no longer asks for a manual proxy value. Non-Render hosts still require specific proxy addresses. Actual forwarded-IP/spoofing behavior remains a staging verification item.

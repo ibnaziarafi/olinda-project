@@ -9,8 +9,6 @@ services:
     envVars:
       - key: APP_ENV
         value: production
-      - key: FORWARDED_ALLOW_IPS
-        sync: false
       - key: FRONTEND_ORIGINS
         value: https://hobartcollege.education.tas.edu.au,https://olinda.rafistacks.dev
       - key: UNANSWERED_LOG_ENABLED
@@ -57,8 +55,6 @@ services:
     envVars:
       - key: APP_ENV
         value: production
-      - key: FORWARDED_ALLOW_IPS
-        sync: false
       - key: FRONTEND_ORIGINS
         value: https://portal-olinda.rafistacks.dev
       - key: SUPABASE_URL

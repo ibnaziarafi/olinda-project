@@ -257,6 +257,18 @@ class SecurityTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 security.validate_config(chat=True)
 
+    def test_render_default_proxy_config_is_accepted_only_on_render(self):
+        with patch.object(security, "PRODUCTION", True), patch.object(security, "ORIGINS", ["https://olinda.rafistacks.dev"]), patch.dict(os.environ,
+            APP_ENV="production", SUPABASE_URL="https://example.supabase.co", SUPABASE_KEY="test-backend-key",
+            FORWARDED_ALLOW_IPS="*", RENDER="true"):
+            security.validate_config(chat=True)
+            security.validate_config(chat=False)
+            with patch.dict(os.environ, RENDER="false"):
+                with self.assertRaisesRegex(RuntimeError, "only on Render"):
+                    security.validate_config()
+            with patch.dict(os.environ, RENDER="false", FORWARDED_ALLOW_IPS="127.0.0.1,10.0.0.0/8"):
+                security.validate_config()
+
     def test_concurrency_saturation_and_quota_store_failure(self):
         app = FastAPI()
         @app.post("/chat")

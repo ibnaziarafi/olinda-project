@@ -80,9 +80,9 @@ Shared counters are necessary so restarting the server or adding another instanc
 | `CHAT_DAILY_REQUEST_LIMIT` | `200` | Not needed |
 | `UNANSWERED_LOG_ENABLED` | `true` | Not needed |
 | `STAFF_USERS` | Not needed | Existing/private staff account definition |
-| `FORWARDED_ALLOW_IPS` | Developer-verified hosting proxy addresses | Developer-verified hosting proxy addresses |
+| `FORWARDED_ALLOW_IPS` | Render supplies `*` automatically | Render supplies `*` automatically |
 
-The developer must verify proxy/client-IP handling before deployment so minute limits work correctly. Do not guess proxy addresses or set wildcard trust. This is a hosting configuration detail, not another account to buy. `/health` alone does not prove quota storage works.
+On Render's native Python services, leave its automatic `FORWARDED_ALLOW_IPS=*` value in place; no proxy IP lookup is required. The code accepts this default when Render's `RENDER=true` marker is present. On other hosts, configure specific verified proxy addresses. Verify HTTPS detection and client-IP handling in staging, including spoofed forwarding headers, before claiming per-IP limits cannot be bypassed. `/health` alone does not prove quota storage works. See [Render's documented defaults](https://render.com/docs/environment-variables#python-3).
 
 The initial staff account format is:
 
